@@ -1,0 +1,41 @@
+# Core FastAPI and WebSocket dependencies
+fastapi
+uvicorn[standard]
+websockets
+python-multipart
+pydantic
+
+# Database dependencies
+sqlalchemy
+psycopg2-binary
+alembic
+asyncpg
+
+# AI and Machine Learning libraries
+google-genai
+openai
+
+# Data processing and utilities
+python-dotenv
+pydub
+
+# Additional utility libraries
+pytz
+python-dateutil
+
+# HTTP and API utilities
+httpx
+requests
+aiofiles
+
+# Audio and media processing
+pillow
+opencv-python
+
+# Development and debugging
+pytest
+black
+flake8
+
+# Scheduler for daily tasks
+apscheduler
