@@ -178,6 +178,7 @@ export default function App() {
   const geminiReconnectTimer = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<number>(0);
+  const playbackQueueRef = useRef<Promise<void>>(Promise.resolve());
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const currentAssistantMessageIdRef = useRef<string | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
@@ -254,6 +255,7 @@ export default function App() {
       }
       audioContextRef.current = new AudioContextConstructor({ sampleRate: OUTPUT_SAMPLE_RATE });
       audioQueueRef.current = 0;
+      playbackQueueRef.current = Promise.resolve();
     }
     const context = audioContextRef.current;
     if (context.state === "suspended") {
@@ -262,8 +264,8 @@ export default function App() {
     return context;
   }, []);
 
-  const playAssistantAudio = useCallback(
-    (audioPayload: string | { data?: string; mime_type?: string; sample_rate?: number }) => {
+  const processAssistantAudio = useCallback(
+    async (audioPayload: string | { data?: string; mime_type?: string; sample_rate?: number }) => {
       const context = ensureAudioContext();
       if (!context) {
         return;
@@ -321,6 +323,15 @@ export default function App() {
       }
     },
     [ensureAudioContext]
+  );
+
+  const playAssistantAudio = useCallback(
+    (audioPayload: string | { data?: string; mime_type?: string; sample_rate?: number }) => {
+      playbackQueueRef.current = playbackQueueRef.current
+        .catch(() => undefined)
+        .then(() => processAssistantAudio(audioPayload));
+    },
+    [processAssistantAudio]
   );
 
   const appendChatMessage = useCallback((message: Omit<ChatMessage, "id" | "timestamp"> & { id?: string }) => {
@@ -624,6 +635,8 @@ export default function App() {
       if (audioContextRef.current) {
         audioContextRef.current.close().catch(() => undefined);
         audioContextRef.current = null;
+        audioQueueRef.current = 0;
+        playbackQueueRef.current = Promise.resolve();
       }
     };
   }, [handleGeminiPayload]);

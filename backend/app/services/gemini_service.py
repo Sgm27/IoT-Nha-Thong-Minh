@@ -71,7 +71,6 @@ class GeminiService:
         self._current_user_input = ""
         self._current_assistant_output = ""
         self._send_locks: Dict[WebSocket, asyncio.Lock] = {}
-        self._audio_queues: Dict[WebSocket, asyncio.Queue[dict]] = {}
         self._default_output_sample_rate = 24000
 
     # ------------------------------------------------------------------
@@ -90,15 +89,8 @@ class GeminiService:
 
         config = self._create_live_config(previous_session_handle)
 
-        send_task = receive_task = ping_task = audio_dispatch_task = None
-        audio_queue: Optional[asyncio.Queue[dict]] = None
+        send_task = receive_task = ping_task = None
         try:
-            audio_queue = asyncio.Queue()
-            self._audio_queues[websocket] = audio_queue
-            audio_dispatch_task = asyncio.create_task(
-                self._dispatch_audio_queue(websocket, audio_queue)
-            )
-
             async with self.client.aio.live.connect(model=self.model, config=config) as session:
                 send_task = asyncio.create_task(
                     self._relay_client_to_gemini(websocket, session)
@@ -119,22 +111,9 @@ class GeminiService:
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected by client")
         finally:
-            if audio_queue is not None:
-                try:
-                    audio_queue.put_nowait({"_close": True})
-                except asyncio.QueueFull:
-                    pass
-
             for task in filter(None, [send_task, receive_task, ping_task]):
                 if not task.done():
                     task.cancel()
-            if audio_dispatch_task is not None:
-                if not audio_dispatch_task.done():
-                    try:
-                        await audio_dispatch_task
-                    except asyncio.CancelledError:
-                        pass
-            self._audio_queues.pop(websocket, None)
             self._send_locks.pop(websocket, None)
 
     async def _run_offline_loop(self, websocket: WebSocket) -> None:
@@ -234,6 +213,7 @@ class GeminiService:
                     transcription = response.server_content.output_transcription
                     if transcription.text:
                         self._current_assistant_output += transcription.text
+                        logger.info("Gemini transcript chunk:\n%s", transcription.text)
                     await self._send_safely(
                         websocket,
                         {
@@ -245,6 +225,10 @@ class GeminiService:
                         },
                     )
                     if transcription.finished and self._current_assistant_output.strip():
+                        logger.info(
+                            "Gemini full transcript:\n%s",
+                            self._current_assistant_output.strip(),
+                        )
                         self._append_to_conversation_history(
                             "assistant", self._current_assistant_output.strip()
                         )
@@ -254,6 +238,7 @@ class GeminiService:
                     transcription = response.server_content.input_transcription
                     if transcription.text:
                         self._current_user_input += transcription.text
+                        logger.info("User transcript chunk:\n%s", transcription.text)
                     await self._send_safely(
                         websocket,
                         {
@@ -265,6 +250,10 @@ class GeminiService:
                         },
                     )
                     if transcription.finished and self._current_user_input.strip():
+                        logger.info(
+                            "User full transcript:\n%s",
+                            self._current_user_input.strip(),
+                        )
                         self._append_to_conversation_history(
                             "user", self._current_user_input.strip()
                         )
@@ -296,25 +285,6 @@ class GeminiService:
         finally:
             logger.info("Gemini -> Client relay stopped")
 
-    async def _dispatch_audio_queue(
-        self, websocket: WebSocket, queue: asyncio.Queue[dict]
-    ) -> None:
-        try:
-            while True:
-                payload = await queue.get()
-                try:
-                    if not isinstance(payload, dict):
-                        continue
-                    if payload.get("_close"):
-                        return
-                    audio_payload = {k: v for k, v in payload.items() if k != "_close"}
-                    if audio_payload:
-                        await self._send_safely(websocket, {"audio": audio_payload})
-                finally:
-                    queue.task_done()
-        except asyncio.CancelledError:
-            logger.debug("Audio dispatch task cancelled")
-
     async def _enqueue_audio_chunk(self, websocket: WebSocket, inline_data) -> None:
         if not inline_data or not getattr(inline_data, "data", None):
             return
@@ -333,10 +303,7 @@ class GeminiService:
             "mime_type": mime_type if "rate" in mime_type else f"audio/pcm;rate={sample_rate}",
             "sample_rate": sample_rate,
         }
-
-        queue = self._audio_queues.get(websocket)
-        if queue is not None:
-            await queue.put(payload)
+        await self._send_safely(websocket, {"audio": payload})
 
     async def _ping_websocket(self, websocket: WebSocket) -> None:
         try:
