@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +36,14 @@ interface LightState {
 interface FeedbackState {
   message: string;
   isError?: boolean;
+}
+
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: number;
+  streaming?: boolean;
 }
 
 async function apiClient<TResponse>(url: string, options: RequestInit = {}): Promise<TResponse> {
@@ -62,14 +78,31 @@ const normalizeLocation = (location: string) => location.trim().toLowerCase();
 const sortLights = (lights: LightState[]) =>
   [...lights].sort((a, b) => a.location.localeCompare(b.location, "vi", { sensitivity: "base" }));
 
+const PCM_SAMPLE_RATE = 16000; // Matches Gemini Live audio sample rate configured in .env.example
+
+const createMessageId = () =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 export default function App() {
   const [lights, setLights] = useState<LightState[]>([]);
   const [musicLibrary, setMusicLibrary] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [lightLocation, setLightLocation] = useState<string>("");
   const [musicTitle, setMusicTitle] = useState<string>("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState<string>("");
+  const [geminiStatus, setGeminiStatus] = useState<string>("Đang kết nối tới Gemini...");
+  const [isGeminiConnected, setIsGeminiConnected] = useState<boolean>(false);
   const reconnectTimer = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const geminiSocketRef = useRef<WebSocket | null>(null);
+  const geminiReconnectTimer = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioQueueRef = useRef<number>(0);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const currentAssistantMessageIdRef = useRef<string | null>(null);
 
   const showFeedback = useCallback((message: string, isError = false) => {
     setFeedback({ message, isError });
@@ -124,6 +157,242 @@ export default function App() {
     refreshLights();
     refreshMusicLibrary();
   }, [refreshLights, refreshMusicLibrary]);
+
+  const ensureAudioContext = useCallback(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    if (!audioContextRef.current) {
+      const AudioContextConstructor = (window.AudioContext || (window as typeof window & {
+        webkitAudioContext?: typeof AudioContext;
+      }).webkitAudioContext) as typeof AudioContext | undefined;
+      if (!AudioContextConstructor) {
+        return null;
+      }
+      audioContextRef.current = new AudioContextConstructor({ sampleRate: PCM_SAMPLE_RATE });
+      audioQueueRef.current = 0;
+    }
+    const context = audioContextRef.current;
+    if (context.state === "suspended") {
+      void context.resume();
+    }
+    return context;
+  }, []);
+
+  const playAssistantAudio = useCallback(
+    (base64Audio: string) => {
+      const context = ensureAudioContext();
+      if (!context) {
+        return;
+      }
+
+      try {
+        const binaryString = atob(base64Audio);
+        const buffer = new ArrayBuffer(binaryString.length);
+        const bytes = new Uint8Array(buffer);
+        for (let index = 0; index < binaryString.length; index += 1) {
+          bytes[index] = binaryString.charCodeAt(index);
+        }
+
+        const dataView = new DataView(buffer);
+        const sampleCount = Math.floor(binaryString.length / 2);
+        const floatData = new Float32Array(sampleCount);
+        for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+          const sample = dataView.getInt16(sampleIndex * 2, true);
+          floatData[sampleIndex] = sample / 32768;
+        }
+
+        const audioBuffer = context.createBuffer(1, floatData.length, PCM_SAMPLE_RATE);
+        audioBuffer.copyToChannel(floatData, 0);
+
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(context.destination);
+
+        const startTime = Math.max(context.currentTime, audioQueueRef.current);
+        source.start(startTime);
+        audioQueueRef.current = startTime + audioBuffer.duration;
+      } catch (error) {
+        console.error("Không thể phát âm thanh từ Gemini", error);
+      }
+    },
+    [ensureAudioContext]
+  );
+
+  const appendChatMessage = useCallback((message: Omit<ChatMessage, "id" | "timestamp"> & { id?: string }) => {
+    setChatMessages((previous) => [
+      ...previous,
+      {
+        id: message.id ?? createMessageId(),
+        role: message.role,
+        content: message.content,
+        streaming: message.streaming,
+        timestamp: Date.now()
+      }
+    ]);
+  }, []);
+
+  const updateAssistantMessage = useCallback(
+    (text: string, finished: boolean) => {
+      if (!text) {
+        if (finished && currentAssistantMessageIdRef.current) {
+          const messageId = currentAssistantMessageIdRef.current;
+          setChatMessages((previous) =>
+            previous.map((item) =>
+              item.id === messageId
+                ? { ...item, streaming: false, timestamp: Date.now() }
+                : item
+            )
+          );
+          currentAssistantMessageIdRef.current = null;
+        }
+        return;
+      }
+
+      setChatMessages((previous) => {
+        let targetId = currentAssistantMessageIdRef.current;
+        const existing = targetId ? previous.find((item) => item.id === targetId) : undefined;
+
+        if (!existing) {
+          targetId = createMessageId();
+          currentAssistantMessageIdRef.current = targetId;
+          return [
+            ...previous,
+            {
+              id: targetId,
+              role: "assistant",
+              content: text,
+              streaming: !finished,
+              timestamp: Date.now()
+            }
+          ];
+        }
+
+        const previousContent = existing.content;
+        const mergedContent = !finished && previousContent && text.startsWith(previousContent)
+          ? text
+          : finished
+            ? text
+            : `${previousContent}${text}`;
+
+        const updated = previous.map((item) =>
+          item.id === targetId
+            ? {
+                ...item,
+                content: mergedContent,
+                streaming: !finished,
+                timestamp: finished ? Date.now() : item.timestamp
+              }
+            : item
+        );
+
+        if (finished) {
+          currentAssistantMessageIdRef.current = null;
+        }
+
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleGeminiPayload = useCallback(
+    (payload: unknown) => {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+
+      const data = payload as Record<string, unknown>;
+
+      if ("setupComplete" in data) {
+        setGeminiStatus("Đã kết nối với Gemini. Bạn có thể trò chuyện ngay!");
+        return;
+      }
+
+      if ("type" in data && typeof data.type === "string") {
+        switch (data.type) {
+          case "keepalive": {
+            if (geminiSocketRef.current && geminiSocketRef.current.readyState === WebSocket.OPEN) {
+              geminiSocketRef.current.send(
+                JSON.stringify({ keepalive: { timestamp: new Date().toISOString() } })
+              );
+            }
+            return;
+          }
+          case "tool_call": {
+            const functionName = typeof data.function_name === "string" ? data.function_name : "unknown";
+            appendChatMessage({
+              role: "system",
+              content: `Gemini đang gọi chức năng “${functionName}”.`
+            });
+            return;
+          }
+          case "screen_navigation": {
+            const action = typeof data.action === "string" ? data.action : "navigation";
+            appendChatMessage({
+              role: "system",
+              content: `Ứng dụng đang thực hiện thao tác: ${action}`
+            });
+            return;
+          }
+          case "memory_update": {
+            appendChatMessage({
+              role: "system",
+              content: "Gemini đã ghi nhớ thông tin mới về bạn."
+            });
+            return;
+          }
+          case "smart_home_light_update": {
+            const location = typeof data.location === "string" ? data.location : "";
+            const isOn = Boolean(data.is_on);
+            if (location) {
+              appendChatMessage({
+                role: "system",
+                content: `Đèn tại “${location}” hiện đang ${isOn ? "bật" : "tắt"}.`
+              });
+              applyLightUpdate({ location, is_on: isOn });
+            }
+            return;
+          }
+          case "smart_home_music": {
+            const matched = typeof data.matched_song === "string" ? data.matched_song : null;
+            const requested = typeof data.requested_title === "string" ? data.requested_title : "bài hát";
+            appendChatMessage({
+              role: "system",
+              content: matched
+                ? `Đang phát bài hát “${matched}” theo yêu cầu “${requested}”.`
+                : `Không tìm thấy bài hát phù hợp với yêu cầu “${requested}”.`
+            });
+            return;
+          }
+          default:
+            return;
+        }
+      }
+
+      if ("transcription" in data && data.transcription && typeof data.transcription === "object") {
+        const transcription = data.transcription as Record<string, unknown>;
+        const text = typeof transcription.text === "string" ? transcription.text : "";
+        const sender = typeof transcription.sender === "string" ? transcription.sender : "";
+        const finished = Boolean(transcription.finished);
+        if (sender === "Gemini") {
+          updateAssistantMessage(text, finished);
+        }
+        return;
+      }
+
+      if ("text" in data && typeof data.text === "string") {
+        updateAssistantMessage(data.text, true);
+        return;
+      }
+
+      if ("audio" in data && typeof data.audio === "string") {
+        playAssistantAudio(data.audio);
+        return;
+      }
+    },
+    [appendChatMessage, applyLightUpdate, playAssistantAudio, updateAssistantMessage]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -180,6 +449,86 @@ export default function App() {
     };
   }, [applyLightSnapshot, applyLightUpdate]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const connectGemini = () => {
+      if (!isMounted || geminiSocketRef.current) {
+        return;
+      }
+
+      try {
+        setGeminiStatus("Đang kết nối tới Gemini...");
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const socket = new WebSocket(`${protocol}://${window.location.host}/ws/gemini`);
+        geminiSocketRef.current = socket;
+
+        socket.addEventListener("open", () => {
+          if (!isMounted) {
+            return;
+          }
+          setIsGeminiConnected(true);
+          setGeminiStatus("Đã kết nối với Gemini. Bạn có thể trò chuyện ngay!");
+        });
+
+        socket.addEventListener("message", (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            handleGeminiPayload(payload);
+          } catch (error) {
+            console.error("Không thể phân tích dữ liệu Gemini", error);
+          }
+        });
+
+        socket.addEventListener("close", () => {
+          if (geminiSocketRef.current === socket) {
+            geminiSocketRef.current = null;
+          }
+          if (isMounted) {
+            setIsGeminiConnected(false);
+            setGeminiStatus("Mất kết nối tới Gemini. Đang thử kết nối lại...");
+            geminiReconnectTimer.current = window.setTimeout(connectGemini, 3000);
+          }
+        });
+
+        socket.addEventListener("error", () => {
+          socket.close();
+        });
+      } catch (error) {
+        console.error("Không thể kết nối Gemini", error);
+        if (isMounted) {
+          setIsGeminiConnected(false);
+          setGeminiStatus("Không thể kết nối Gemini. Thử lại sau.");
+          geminiReconnectTimer.current = window.setTimeout(connectGemini, 3000);
+        }
+      }
+    };
+
+    connectGemini();
+
+    return () => {
+      isMounted = false;
+      if (geminiReconnectTimer.current) {
+        window.clearTimeout(geminiReconnectTimer.current);
+        geminiReconnectTimer.current = null;
+      }
+      geminiSocketRef.current?.close();
+      geminiSocketRef.current = null;
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => undefined);
+        audioContextRef.current = null;
+      }
+    };
+  }, [handleGeminiPayload]);
+
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
+  }, [chatMessages]);
+
   const handleLightAction = useCallback(
     async (action: "on" | "off") => {
       const location = lightLocation.trim();
@@ -235,6 +584,42 @@ export default function App() {
   const sortedLibrary = useMemo(
     () => [...musicLibrary].sort((a, b) => a.localeCompare(b, "vi", { sensitivity: "base" })),
     [musicLibrary]
+  );
+
+  const sendChatMessage = useCallback(() => {
+    const message = chatInput.trim();
+    if (!message) {
+      showFeedback("Vui lòng nhập nội dung tin nhắn", true);
+      return;
+    }
+
+    const socket = geminiSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      showFeedback("Kết nối với Gemini chưa sẵn sàng", true);
+      return;
+    }
+
+    appendChatMessage({ role: "user", content: message });
+    socket.send(JSON.stringify({ text: message }));
+    setChatInput("");
+  }, [appendChatMessage, chatInput, showFeedback]);
+
+  const handleChatSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      sendChatMessage();
+    },
+    [sendChatMessage]
+  );
+
+  const handleChatKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendChatMessage();
+      }
+    },
+    [sendChatMessage]
   );
 
   return (
@@ -356,6 +741,80 @@ export default function App() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Trò chuyện với Gemini</CardTitle>
+            <CardDescription>
+              Gemini hỗ trợ giọng nói và văn bản nhờ cấu hình realtime của Gemini Live API.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-4">
+            <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-2 text-sm text-muted-foreground">
+              <span>Trạng thái: {geminiStatus}</span>
+              <span
+                className={cn(
+                  "flex h-2 w-2 rounded-full",
+                  isGeminiConnected ? "bg-green-500" : "bg-yellow-500 animate-pulse"
+                )}
+                aria-hidden
+              />
+            </div>
+            <div className="flex-1 overflow-hidden rounded-lg border bg-background">
+              <div ref={chatContainerRef} className="h-80 space-y-4 overflow-y-auto p-4 text-sm">
+                {chatMessages.length ? (
+                  chatMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "flex flex-col gap-1",
+                        message.role === "user" ? "items-end" : "items-start"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-lg px-3 py-2",
+                          message.role === "assistant"
+                            ? "bg-primary/10 text-primary-foreground/90"
+                            : message.role === "user"
+                              ? "bg-muted text-foreground"
+                              : "bg-amber-50 text-amber-900"
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                      </div>
+                      {message.streaming ? (
+                        <span className="text-xs text-muted-foreground">Gemini đang trả lời...</span>
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+                    Chưa có cuộc trò chuyện nào. Hãy gửi lời chào cho Gemini nhé!
+                  </div>
+                )}
+              </div>
+            </div>
+            <form className="flex flex-col gap-3" onSubmit={handleChatSubmit}>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Tin nhắn</span>
+                <textarea
+                  value={chatInput}
+                  onChange={(event) => setChatInput(event.target.value)}
+                  onKeyDown={handleChatKeyDown}
+                  rows={3}
+                  className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder="Nhập nội dung bạn muốn trao đổi với Gemini"
+                />
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button type="submit" disabled={!isGeminiConnected}>
+                  Gửi tin nhắn
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
         {feedback?.message && (
           <div
