@@ -6,9 +6,12 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.websocket import router as websocket_router
 from app.api.routes.smart_home import router as smart_home_router
+from app.core.logging_config import setup_logging
 
 
 def create_app() -> FastAPI:
+    setup_logging()
+
     app = FastAPI(title="IoT Smart Home Backend")
     app.include_router(websocket_router)
     app.include_router(smart_home_router)
