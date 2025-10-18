@@ -1,0 +1,34 @@
+{
+  "1": {
+    "name": "1",
+    "is_on": false
+  },
+  "ban công": {
+    "name": "ban công",
+    "is_on": false
+  },
+  "nhà bếp": {
+    "name": "Nhà bếp",
+    "is_on": true
+  },
+  "nhà tắm": {
+    "name": "nhà tắm",
+    "is_on": false
+  },
+  "phòng khách": {
+    "name": "Phòng khách",
+    "is_on": true
+  },
+  "phòng ngủ": {
+    "name": "Phòng ngủ",
+    "is_on": false
+  },
+  "số 1": {
+    "name": "số 1",
+    "is_on": false
+  },
+  "đèn số 1": {
+    "name": "đèn số 1",
+    "is_on": true
+  }
+}
