@@ -491,8 +491,14 @@ export default function App() {
         const text = typeof transcription.text === "string" ? transcription.text : "";
         const sender = typeof transcription.sender === "string" ? transcription.sender : "";
         const finished = Boolean(transcription.finished);
+        
+        console.log(`📝 Transcription: sender=${sender}, finished=${finished}, text=${text.slice(0, 50)}...`);
+        
         if (sender === "Gemini") {
           updateAssistantMessage(text, finished);
+          if (finished && text === "") {
+            console.log("✅ Turn hoàn thành! Sẵn sàng nhận input tiếp theo.");
+          }
         }
         return;
       }
@@ -907,6 +913,9 @@ export default function App() {
                 }
               })
             );
+            console.debug("🎤 Sent audio chunk to Gemini");
+          } else {
+            console.warn("⚠️ Cannot send audio: WebSocket not ready");
           }
         }
 
@@ -1091,7 +1100,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
-                    variant={isRecording ? "destructive" : "secondary"}
+                    variant={isRecording ? "default" : "secondary"}
                     onClick={toggleRecording}
                     disabled={!isGeminiConnected}
                   >
