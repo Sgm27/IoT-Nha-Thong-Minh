@@ -71,6 +71,8 @@ class GeminiService:
         self._current_user_input = ""
         self._current_assistant_output = ""
         self._send_locks: Dict[WebSocket, asyncio.Lock] = {}
+        self._audio_queues: Dict[WebSocket, asyncio.Queue[dict]] = {}
+        self._default_output_sample_rate = 24000
 
     # ------------------------------------------------------------------
     # WebSocket orchestration
@@ -88,8 +90,15 @@ class GeminiService:
 
         config = self._create_live_config(previous_session_handle)
 
-        send_task = receive_task = ping_task = None
+        send_task = receive_task = ping_task = audio_dispatch_task = None
+        audio_queue: Optional[asyncio.Queue[dict]] = None
         try:
+            audio_queue = asyncio.Queue()
+            self._audio_queues[websocket] = audio_queue
+            audio_dispatch_task = asyncio.create_task(
+                self._dispatch_audio_queue(websocket, audio_queue)
+            )
+
             async with self.client.aio.live.connect(model=self.model, config=config) as session:
                 send_task = asyncio.create_task(
                     self._relay_client_to_gemini(websocket, session)
@@ -110,9 +119,22 @@ class GeminiService:
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected by client")
         finally:
+            if audio_queue is not None:
+                try:
+                    audio_queue.put_nowait({"_close": True})
+                except asyncio.QueueFull:
+                    pass
+
             for task in filter(None, [send_task, receive_task, ping_task]):
                 if not task.done():
                     task.cancel()
+            if audio_dispatch_task is not None:
+                if not audio_dispatch_task.done():
+                    try:
+                        await audio_dispatch_task
+                    except asyncio.CancelledError:
+                        pass
+            self._audio_queues.pop(websocket, None)
             self._send_locks.pop(websocket, None)
 
     async def _run_offline_loop(self, websocket: WebSocket) -> None:
@@ -253,8 +275,7 @@ class GeminiService:
                         if getattr(part, "text", None):
                             await self._send_safely(websocket, {"text": part.text})
                         if getattr(part, "inline_data", None):
-                            audio = base64.b64encode(part.inline_data.data).decode("utf-8")
-                            await self._send_safely(websocket, {"audio": audio})
+                            await self._enqueue_audio_chunk(websocket, part.inline_data)
 
                 if response.session_resumption_update:
                     update = response.session_resumption_update
@@ -274,6 +295,48 @@ class GeminiService:
             logger.info("Client disconnected (receive loop)")
         finally:
             logger.info("Gemini -> Client relay stopped")
+
+    async def _dispatch_audio_queue(
+        self, websocket: WebSocket, queue: asyncio.Queue[dict]
+    ) -> None:
+        try:
+            while True:
+                payload = await queue.get()
+                try:
+                    if not isinstance(payload, dict):
+                        continue
+                    if payload.get("_close"):
+                        return
+                    audio_payload = {k: v for k, v in payload.items() if k != "_close"}
+                    if audio_payload:
+                        await self._send_safely(websocket, {"audio": audio_payload})
+                finally:
+                    queue.task_done()
+        except asyncio.CancelledError:
+            logger.debug("Audio dispatch task cancelled")
+
+    async def _enqueue_audio_chunk(self, websocket: WebSocket, inline_data) -> None:
+        if not inline_data or not getattr(inline_data, "data", None):
+            return
+
+        try:
+            encoded = base64.b64encode(inline_data.data).decode("utf-8")
+        except (TypeError, ValueError, binascii.Error):
+            logger.warning("Không thể mã hoá audio chunk từ Gemini")
+            return
+
+        mime_type = getattr(inline_data, "mime_type", None) or "audio/pcm"
+        sample_rate = self._extract_sample_rate(mime_type) or self._default_output_sample_rate
+
+        payload = {
+            "data": encoded,
+            "mime_type": mime_type if "rate" in mime_type else f"audio/pcm;rate={sample_rate}",
+            "sample_rate": sample_rate,
+        }
+
+        queue = self._audio_queues.get(websocket)
+        if queue is not None:
+            await queue.put(payload)
 
     async def _ping_websocket(self, websocket: WebSocket) -> None:
         try:
@@ -528,3 +591,17 @@ class GeminiService:
             lock = asyncio.Lock()
             self._send_locks[websocket] = lock
         return lock
+
+    @staticmethod
+    def _extract_sample_rate(mime_type: Optional[str]) -> Optional[int]:
+        if not mime_type:
+            return None
+        for part in mime_type.split(";")[1:]:
+            key, _, value = part.partition("=")
+            if key.strip().lower() == "rate":
+                try:
+                    rate = int(value.strip())
+                except ValueError:
+                    return None
+                return rate if rate > 0 else None
+        return None

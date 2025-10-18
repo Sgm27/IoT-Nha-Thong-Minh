@@ -78,7 +78,9 @@ const normalizeLocation = (location: string) => location.trim().toLowerCase();
 const sortLights = (lights: LightState[]) =>
   [...lights].sort((a, b) => a.location.localeCompare(b.location, "vi", { sensitivity: "base" }));
 
-const PCM_SAMPLE_RATE = 16000; // Matches Gemini Live audio sample rate configured in .env.example
+const INPUT_SAMPLE_RATE = 16000; // Sample rate expected by Gemini Live for incoming audio
+const OUTPUT_SAMPLE_RATE = 24000; // Sample rate returned by Gemini Live when synthesising speech
+const PCM_CHUNK_DURATION_MS = 100; // Chunk microphone audio in ~100ms windows for streaming
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   let binary = "";
@@ -94,6 +96,68 @@ const createMessageId = () =>
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const concatFloat32 = (existing: Float32Array | null, incoming: Float32Array) => {
+  if (!existing || existing.length === 0) {
+    return incoming.slice();
+  }
+  if (!incoming || incoming.length === 0) {
+    return existing.slice();
+  }
+  const result = new Float32Array(existing.length + incoming.length);
+  result.set(existing, 0);
+  result.set(incoming, existing.length);
+  return result;
+};
+
+const resampleFloat32 = (input: Float32Array, sourceRate: number, targetRate: number) => {
+  if (sourceRate === targetRate || input.length === 0) {
+    return input.slice();
+  }
+  const sampleCount = Math.max(1, Math.round((input.length * targetRate) / sourceRate));
+  const result = new Float32Array(sampleCount);
+  const ratio = sourceRate / targetRate;
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const position = index * ratio;
+    const leftIndex = Math.floor(position);
+    const rightIndex = Math.min(leftIndex + 1, input.length - 1);
+    const interpolation = position - leftIndex;
+    const leftValue = input[leftIndex];
+    const rightValue = input[rightIndex];
+    result[index] = leftValue + (rightValue - leftValue) * interpolation;
+  }
+
+  return result;
+};
+
+const float32ToPCM16 = (input: Float32Array) => {
+  const buffer = new ArrayBuffer(input.length * 2);
+  const view = new DataView(buffer);
+  for (let index = 0; index < input.length; index += 1) {
+    const value = clamp(input[index], -1, 1);
+    const intSample = value < 0 ? value * 0x8000 : value * 0x7fff;
+    view.setInt16(index * 2, Math.round(intSample), true);
+  }
+  return buffer;
+};
+
+const extractSampleRate = (mimeType?: string, fallback?: number) => {
+  if (typeof fallback === "number" && Number.isFinite(fallback) && fallback > 0) {
+    return fallback;
+  }
+  if (!mimeType) {
+    return undefined;
+  }
+  const match = /rate\s*=\s*(\d+)/i.exec(mimeType);
+  if (!match) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
 
 export default function App() {
   const [lights, setLights] = useState<LightState[]>([]);
@@ -117,7 +181,11 @@ export default function App() {
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const currentAssistantMessageIdRef = useRef<string | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingAudioContextRef = useRef<AudioContext | null>(null);
+  const recordingProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const recordingSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const recordingGainNodeRef = useRef<GainNode | null>(null);
+  const pendingInputSamplesRef = useRef<Float32Array | null>(null);
 
   const showFeedback = useCallback((message: string, isError = false) => {
     setFeedback({ message, isError });
@@ -184,7 +252,7 @@ export default function App() {
       if (!AudioContextConstructor) {
         return null;
       }
-      audioContextRef.current = new AudioContextConstructor({ sampleRate: PCM_SAMPLE_RATE });
+      audioContextRef.current = new AudioContextConstructor({ sampleRate: OUTPUT_SAMPLE_RATE });
       audioQueueRef.current = 0;
     }
     const context = audioContextRef.current;
@@ -195,14 +263,29 @@ export default function App() {
   }, []);
 
   const playAssistantAudio = useCallback(
-    (base64Audio: string) => {
+    (audioPayload: string | { data?: string; mime_type?: string; sample_rate?: number }) => {
       const context = ensureAudioContext();
       if (!context) {
         return;
       }
 
       try {
-        const binaryString = atob(base64Audio);
+        const payloadObject =
+          typeof audioPayload === "string"
+            ? { data: audioPayload }
+            : audioPayload || {};
+
+        const base64 = typeof payloadObject.data === "string" ? payloadObject.data : null;
+        if (!base64) {
+          return;
+        }
+
+        const parsedSampleRate = extractSampleRate(
+          typeof payloadObject.mime_type === "string" ? payloadObject.mime_type : undefined,
+          typeof payloadObject.sample_rate === "number" ? payloadObject.sample_rate : undefined
+        ) || OUTPUT_SAMPLE_RATE;
+
+        const binaryString = atob(base64);
         const buffer = new ArrayBuffer(binaryString.length);
         const bytes = new Uint8Array(buffer);
         for (let index = 0; index < binaryString.length; index += 1) {
@@ -217,8 +300,14 @@ export default function App() {
           floatData[sampleIndex] = sample / 32768;
         }
 
-        const audioBuffer = context.createBuffer(1, floatData.length, PCM_SAMPLE_RATE);
-        audioBuffer.copyToChannel(floatData, 0);
+        const targetSampleRate = context.sampleRate;
+        const processedData =
+          targetSampleRate === parsedSampleRate
+            ? floatData
+            : resampleFloat32(floatData, parsedSampleRate, targetSampleRate);
+
+        const audioBuffer = context.createBuffer(1, processedData.length, targetSampleRate);
+        audioBuffer.copyToChannel(processedData, 0);
 
         const source = context.createBufferSource();
         source.buffer = audioBuffer;
@@ -401,8 +490,11 @@ export default function App() {
         return;
       }
 
-      if ("audio" in data && typeof data.audio === "string") {
-        playAssistantAudio(data.audio);
+      if ("audio" in data) {
+        const audioData = data.audio;
+        if (typeof audioData === "string" || (audioData && typeof audioData === "object")) {
+          playAssistantAudio(audioData as string | { data?: string; mime_type?: string; sample_rate?: number });
+        }
         return;
       }
     },
@@ -638,16 +730,39 @@ export default function App() {
   );
 
   const stopRecording = useCallback(() => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop();
+    const processor = recordingProcessorRef.current;
+    if (processor) {
+      processor.disconnect();
+      processor.onaudioprocess = null;
+      recordingProcessorRef.current = null;
     }
+
+    const source = recordingSourceRef.current;
+    if (source) {
+      source.disconnect();
+      recordingSourceRef.current = null;
+    }
+
+    const gainNode = recordingGainNodeRef.current;
+    if (gainNode) {
+      gainNode.disconnect();
+      recordingGainNodeRef.current = null;
+    }
+
+    const context = recordingAudioContextRef.current;
+    if (context) {
+      context.close().catch(() => undefined);
+      recordingAudioContextRef.current = null;
+    }
+
+    pendingInputSamplesRef.current = null;
+
     const stream = recordingStreamRef.current;
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
     }
-    mediaRecorderRef.current = null;
-    recordingStreamRef.current = null;
+
     setIsRecording(false);
   }, []);
 
@@ -660,11 +775,6 @@ export default function App() {
     const socket = geminiSocketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       showFeedback("Kết nối với Gemini chưa sẵn sàng", true);
-      return;
-    }
-
-    if (typeof window === "undefined" || typeof window.MediaRecorder === "undefined") {
-      setRecordingError("Trình duyệt không hỗ trợ ghi âm trực tiếp.");
       return;
     }
 
@@ -683,7 +793,7 @@ export default function App() {
       const stream = await mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: PCM_SAMPLE_RATE,
+          sampleRate: INPUT_SAMPLE_RATE,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
@@ -693,30 +803,53 @@ export default function App() {
       setIsMicPermissionDenied(false);
       recordingStreamRef.current = stream;
 
-      const preferredTypes = [
-        "audio/webm;codecs=opus",
-        "audio/ogg;codecs=opus",
-        "audio/webm"
-      ];
-      const options: MediaRecorderOptions = {};
-      const supportedType = preferredTypes.find((type) =>
-        typeof MediaRecorder.isTypeSupported === "function" ? MediaRecorder.isTypeSupported(type) : false
-      );
-      if (supportedType) {
-        options.mimeType = supportedType;
+      const AudioContextConstructor = (window.AudioContext || (window as typeof window & {
+        webkitAudioContext?: typeof AudioContext;
+      }).webkitAudioContext) as typeof AudioContext | undefined;
+
+      if (!AudioContextConstructor) {
+        setRecordingError("Trình duyệt không hỗ trợ Web Audio API.");
+        stopRecording();
+        return;
       }
 
-      const recorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = recorder;
+      const recordingContext = new AudioContextConstructor({ sampleRate: INPUT_SAMPLE_RATE });
+      recordingAudioContextRef.current = recordingContext;
+      pendingInputSamplesRef.current = null;
 
-      recorder.addEventListener("dataavailable", async (event) => {
-        if (!event.data || event.data.size === 0) {
+      if (recordingContext.state === "suspended") {
+        await recordingContext.resume().catch(() => undefined);
+      }
+
+      const source = recordingContext.createMediaStreamSource(stream);
+      recordingSourceRef.current = source;
+
+      const processor = recordingContext.createScriptProcessor(4096, 1, 1);
+      recordingProcessorRef.current = processor;
+
+      const gainNode = recordingContext.createGain();
+      gainNode.gain.value = 0;
+      recordingGainNodeRef.current = gainNode;
+
+      const pcmChunkSize = Math.max(1, Math.floor((INPUT_SAMPLE_RATE * PCM_CHUNK_DURATION_MS) / 1000));
+      const contextSampleRate = recordingContext.sampleRate;
+
+      processor.onaudioprocess = (event) => {
+        const channelData = event.inputBuffer.getChannelData(0);
+        if (channelData.length === 0) {
           return;
         }
-        try {
-          const buffer = await event.data.arrayBuffer();
-          const base64 = arrayBufferToBase64(buffer);
-          const mimeType = event.data.type || options.mimeType || "audio/webm";
+
+        const resampled = resampleFloat32(channelData, contextSampleRate, INPUT_SAMPLE_RATE);
+        const existing = pendingInputSamplesRef.current;
+        let combined = concatFloat32(existing, resampled);
+
+        while (combined.length >= pcmChunkSize) {
+          const chunk = combined.slice(0, pcmChunkSize);
+          combined = combined.slice(pcmChunkSize);
+
+          const pcmBuffer = float32ToPCM16(chunk);
+          const base64 = arrayBufferToBase64(pcmBuffer);
           const activeSocket = geminiSocketRef.current;
           if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
             activeSocket.send(
@@ -724,7 +857,7 @@ export default function App() {
                 realtime_input: {
                   media_chunks: [
                     {
-                      mime_type: mimeType,
+                      mime_type: `audio/pcm;rate=${INPUT_SAMPLE_RATE}`,
                       data: base64
                     }
                   ]
@@ -732,21 +865,15 @@ export default function App() {
               })
             );
           }
-        } catch (error) {
-          console.error("Không thể gửi dữ liệu âm thanh tới Gemini", error);
-          setRecordingError("Không thể gửi dữ liệu âm thanh tới Gemini.");
         }
-      });
 
-      recorder.addEventListener("stop", () => {
-        stream.getTracks().forEach((track) => track.stop());
-        if (recordingStreamRef.current === stream) {
-          recordingStreamRef.current = null;
-        }
-        mediaRecorderRef.current = null;
-      });
+        pendingInputSamplesRef.current = combined.length > 0 ? combined : null;
+      };
 
-      recorder.start(500);
+      source.connect(processor);
+      processor.connect(gainNode);
+      gainNode.connect(recordingContext.destination);
+
       setIsRecording(true);
     } catch (error) {
       console.error("Không thể khởi động micro", error);
