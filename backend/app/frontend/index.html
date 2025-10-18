@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Điều khiển Nhà Thông Minh</title>
+    <link rel="stylesheet" href="/frontend/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Điều khiển Nhà Thông Minh</h1>
+        <p>Kiểm thử nhanh các chức năng đèn và phát nhạc của backend FastAPI.</p>
+      </header>
+
+      <section class="card" id="lights-card">
+        <h2>Quản lý đèn</h2>
+        <form id="light-form" class="form-grid">
+          <label for="light-location">Vị trí đèn</label>
+          <input
+            id="light-location"
+            name="location"
+            type="text"
+            placeholder="Ví dụ: phòng khách"
+            required
+          />
+          <div class="button-group">
+            <button type="submit" data-action="on">Bật đèn</button>
+            <button type="submit" data-action="off" class="secondary">Tắt đèn</button>
+          </div>
+        </form>
+        <div class="light-status">
+          <h3>Trạng thái các đèn</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Vị trí</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody id="lights-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" id="music-card">
+        <h2>Phát nhạc</h2>
+        <form id="music-form" class="form-grid">
+          <label for="song-title">Tên bài hát</label>
+          <input
+            id="song-title"
+            name="title"
+            type="text"
+            placeholder="Nhập tên bài hát muốn nghe"
+            required
+          />
+          <button type="submit">Tìm và phát</button>
+        </form>
+        <div class="music-library">
+          <h3>Thư viện hiện có</h3>
+          <ul id="music-list"></ul>
+        </div>
+      </section>
+
+      <section class="card feedback" id="feedback"></section>
+    </main>
+
+    <script src="/frontend/app.js" type="module"></script>
+  </body>
+</html>
