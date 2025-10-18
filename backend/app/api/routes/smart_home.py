@@ -1,6 +1,10 @@
 from typing import List
 
+from mimetypes import guess_type
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, constr
 
 from app.services.smart_home_service import LightState, get_smart_home_service
@@ -26,6 +30,7 @@ class MusicRequest(BaseModel):
 
 class MusicResponse(BaseModel):
     selected_song: str
+    stream_url: str
 
 
 def _serialize_light(state: LightState) -> dict:
@@ -65,7 +70,21 @@ def play_music(payload: MusicRequest) -> MusicResponse:
     selected = smart_home_service.play_music(payload.title)
     if not selected:
         raise HTTPException(status_code=404, detail="Không tìm được bài hát phù hợp")
-    return MusicResponse(selected_song=selected)
+    file_path = smart_home_service.get_song_file(selected)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Không tìm được file bài hát phù hợp")
+    query = urlencode({"title": selected})
+    stream_url = f"/smart-home/music/stream?{query}"
+    return MusicResponse(selected_song=selected, stream_url=stream_url)
+
+
+@router.get("/music/stream")
+def stream_music(title: str) -> FileResponse:
+    file_path = smart_home_service.get_song_file(title)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Không tìm được file bài hát phù hợp")
+    media_type, _ = guess_type(file_path.name)
+    return FileResponse(file_path, media_type=media_type or "audio/mpeg", filename=file_path.name)
 
 
 @router.websocket("/lights/stream")

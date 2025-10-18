@@ -203,6 +203,16 @@ class MusicService:
             return best_match
         return None
 
+    def find_song_file(self, track_title: str) -> Optional[Path]:
+        if not track_title:
+            return None
+        if not self.music_directory.exists():
+            return None
+        for item in self.music_directory.iterdir():
+            if item.is_file() and item.stem == track_title:
+                return item
+        return None
+
 
 class SmartHomeService:
     def __init__(
@@ -221,6 +231,9 @@ class SmartHomeService:
 
     def play_music(self, title: str) -> Optional[str]:
         return self.music_service.choose_song(title)
+
+    def get_song_file(self, title: str) -> Optional[Path]:
+        return self.music_service.find_song_file(title)
 
     def get_lights(self) -> List[LightState]:
         return list(self.lighting_service.get_all_states())

@@ -46,6 +46,11 @@ interface ChatMessage {
   streaming?: boolean;
 }
 
+interface MusicPlaybackResponse {
+  selected_song: string;
+  stream_url: string;
+}
+
 async function apiClient<TResponse>(url: string, options: RequestInit = {}): Promise<TResponse> {
   const response = await fetch(url, {
     headers: {
@@ -162,6 +167,7 @@ const extractSampleRate = (mimeType?: string, fallback?: number) => {
 export default function App() {
   const [lights, setLights] = useState<LightState[]>([]);
   const [musicLibrary, setMusicLibrary] = useState<string[]>([]);
+  const [currentSong, setCurrentSong] = useState<{ title: string; url: string } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [lightLocation, setLightLocation] = useState<string>("");
   const [musicTitle, setMusicTitle] = useState<string>("");
@@ -179,6 +185,7 @@ export default function App() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<number>(0);
   const playbackQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const currentAssistantMessageIdRef = useRef<string | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
@@ -692,10 +699,26 @@ export default function App() {
       }
 
       try {
-        const response = await apiClient<{ selected_song: string }>("/smart-home/music/play", {
+        const response = await apiClient<MusicPlaybackResponse>("/smart-home/music/play", {
           method: "POST",
           body: JSON.stringify({ title })
         });
+        const absoluteUrl = new URL(response.stream_url, window.location.origin).toString();
+        const audioElement = audioPlayerRef.current;
+        if (audioElement) {
+          try {
+            audioElement.pause();
+          } catch (error) {
+            // ignore pause errors
+          }
+          audioElement.src = absoluteUrl;
+          audioElement.load();
+          void audioElement.play().catch((playError) => {
+            console.error("Không thể phát nhạc trên trình duyệt", playError);
+            showFeedback("Không thể phát nhạc trên trình duyệt", true);
+          });
+        }
+        setCurrentSong({ title: response.selected_song, url: absoluteUrl });
         showFeedback(`Đang phát bài: ${response.selected_song}`);
         setMusicTitle("");
       } catch (error) {
@@ -1058,6 +1081,25 @@ export default function App() {
               </form>
 
               <div className="space-y-3">
+                <div className="rounded-lg border bg-background p-4">
+                  <p className="text-sm font-semibold">
+                    {currentSong ? `Đang phát: ${currentSong.title}` : "Chưa phát bài hát nào"}
+                  </p>
+                  <audio
+                    ref={audioPlayerRef}
+                    className="mt-3 w-full"
+                    controls
+                    src={currentSong?.url}
+                  >
+                    Trình duyệt của bạn không hỗ trợ phát nhạc.
+                  </audio>
+                  {!currentSong ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Yêu cầu một bài hát để bắt đầu phát nhạc.
+                    </p>
+                  ) : null}
+                </div>
+
                 <h3 className="text-lg font-semibold">Thư viện hiện có</h3>
                 <div className="rounded-lg border bg-background p-4">
                   {sortedLibrary.length ? (
