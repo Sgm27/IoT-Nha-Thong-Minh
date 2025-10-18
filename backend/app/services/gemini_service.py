@@ -214,7 +214,7 @@ class GeminiService:
                 if response.server_content and response.server_content.input_transcription:
                     transcription = response.server_content.input_transcription
                     if transcription.text:
-                        self._current_user_input += transcription.text
+                        self._24000current_user_input += transcription.text
                     await self._send_safely(
                         websocket,
                         {

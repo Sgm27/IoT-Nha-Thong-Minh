@@ -36,7 +36,7 @@ class Settings:
         default_factory=lambda: _env_str("GOOGLE_API_KEY", None)
     )
     gemini_model: str = field(
-        default_factory=lambda: _env_str("GEMINI_MODEL", "models/gemini-2.0-pro")
+        default_factory=lambda: _env_str("GEMINI_MODEL", "gemini-live-2.5-flash-preview")
     )
     conversation_history_file: Path = field(
         default_factory=lambda: _env_path(
