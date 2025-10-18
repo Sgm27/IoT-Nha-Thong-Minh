@@ -137,9 +137,15 @@ class GeminiService:
     async def _relay_client_to_gemini(self, websocket: WebSocket, session) -> None:
         try:
             while True:
-                message = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=settings.websocket_receive_timeout
-                )
+                try:
+                    message = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=settings.websocket_receive_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Timeout waiting for client message")
+                    continue
+
                 data = json.loads(message)
 
                 if "keepalive" in data:
@@ -195,8 +201,6 @@ class GeminiService:
                         websocket, data["voice_notification_request"]
                     )
                     continue
-        except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for client message")
         except WebSocketDisconnect:
             logger.info("Client disconnected (send loop)")
         finally:
