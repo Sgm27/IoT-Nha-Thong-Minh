@@ -80,6 +80,16 @@ const sortLights = (lights: LightState[]) =>
 
 const PCM_SAMPLE_RATE = 16000; // Matches Gemini Live audio sample rate configured in .env.example
 
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+};
+
 const createMessageId = () =>
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -95,6 +105,9 @@ export default function App() {
   const [chatInput, setChatInput] = useState<string>("");
   const [geminiStatus, setGeminiStatus] = useState<string>("Đang kết nối tới Gemini...");
   const [isGeminiConnected, setIsGeminiConnected] = useState<boolean>(false);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [isMicPermissionDenied, setIsMicPermissionDenied] = useState<boolean>(false);
   const reconnectTimer = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const geminiSocketRef = useRef<WebSocket | null>(null);
@@ -103,6 +116,8 @@ export default function App() {
   const audioQueueRef = useRef<number>(0);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const currentAssistantMessageIdRef = useRef<string | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   const showFeedback = useCallback((message: string, isError = false) => {
     setFeedback({ message, isError });
@@ -622,6 +637,147 @@ export default function App() {
     [sendChatMessage]
   );
 
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    const stream = recordingStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    mediaRecorderRef.current = null;
+    recordingStreamRef.current = null;
+    setIsRecording(false);
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    if (isRecording) {
+      return;
+    }
+    setRecordingError(null);
+
+    const socket = geminiSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      showFeedback("Kết nối với Gemini chưa sẵn sàng", true);
+      return;
+    }
+
+    if (typeof window === "undefined" || typeof window.MediaRecorder === "undefined") {
+      setRecordingError("Trình duyệt không hỗ trợ ghi âm trực tiếp.");
+      return;
+    }
+
+    if (typeof navigator === "undefined") {
+      setRecordingError("Không thể truy cập micro trong môi trường hiện tại.");
+      return;
+    }
+
+    const { mediaDevices } = navigator;
+    if (!mediaDevices?.getUserMedia) {
+      setRecordingError("Không thể truy cập micro trên thiết bị này.");
+      return;
+    }
+
+    try {
+      const stream = await mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: PCM_SAMPLE_RATE,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      setIsMicPermissionDenied(false);
+      recordingStreamRef.current = stream;
+
+      const preferredTypes = [
+        "audio/webm;codecs=opus",
+        "audio/ogg;codecs=opus",
+        "audio/webm"
+      ];
+      const options: MediaRecorderOptions = {};
+      const supportedType = preferredTypes.find((type) =>
+        typeof MediaRecorder.isTypeSupported === "function" ? MediaRecorder.isTypeSupported(type) : false
+      );
+      if (supportedType) {
+        options.mimeType = supportedType;
+      }
+
+      const recorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = recorder;
+
+      recorder.addEventListener("dataavailable", async (event) => {
+        if (!event.data || event.data.size === 0) {
+          return;
+        }
+        try {
+          const buffer = await event.data.arrayBuffer();
+          const base64 = arrayBufferToBase64(buffer);
+          const mimeType = event.data.type || options.mimeType || "audio/webm";
+          const activeSocket = geminiSocketRef.current;
+          if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
+            activeSocket.send(
+              JSON.stringify({
+                realtime_input: {
+                  media_chunks: [
+                    {
+                      mime_type: mimeType,
+                      data: base64
+                    }
+                  ]
+                }
+              })
+            );
+          }
+        } catch (error) {
+          console.error("Không thể gửi dữ liệu âm thanh tới Gemini", error);
+          setRecordingError("Không thể gửi dữ liệu âm thanh tới Gemini.");
+        }
+      });
+
+      recorder.addEventListener("stop", () => {
+        stream.getTracks().forEach((track) => track.stop());
+        if (recordingStreamRef.current === stream) {
+          recordingStreamRef.current = null;
+        }
+        mediaRecorderRef.current = null;
+      });
+
+      recorder.start(500);
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Không thể khởi động micro", error);
+      stopRecording();
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        setIsMicPermissionDenied(true);
+        setRecordingError("Truy cập micro đã bị từ chối. Hãy cấp quyền và thử lại.");
+      } else {
+        setRecordingError("Không thể khởi động micro. Vui lòng thử lại.");
+      }
+    }
+  }, [isRecording, showFeedback, stopRecording]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    void startRecording();
+  }, [isRecording, startRecording, stopRecording]);
+
+  useEffect(() => {
+    if (!isGeminiConnected && isRecording) {
+      stopRecording();
+    }
+  }, [isGeminiConnected, isRecording, stopRecording]);
+
+  useEffect(() => () => {
+    stopRecording();
+  }, [stopRecording]);
+
   return (
     <div className="min-h-screen bg-muted/30">
       <div className="container flex flex-col gap-6 py-10">
@@ -759,6 +915,36 @@ export default function App() {
                 )}
                 aria-hidden
               />
+            </div>
+            <div className="flex flex-col gap-2 rounded-lg border bg-background px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={isRecording ? "destructive" : "secondary"}
+                    onClick={toggleRecording}
+                    disabled={!isGeminiConnected}
+                  >
+                    {isRecording ? "Tắt micro" : "Bật micro"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {isRecording
+                      ? "Đang ghi âm và gửi tới Gemini"
+                      : "Nhấn để trò chuyện với Gemini bằng giọng nói"}
+                  </span>
+                </div>
+                {!isGeminiConnected ? (
+                  <span className="text-xs text-muted-foreground">Cần kết nối Gemini để sử dụng micro</span>
+                ) : null}
+              </div>
+              {isMicPermissionDenied ? (
+                <p className="text-xs text-destructive">
+                  Truy cập micro bị từ chối. Vui lòng kiểm tra quyền của trình duyệt.
+                </p>
+              ) : null}
+              {recordingError ? (
+                <p className="text-xs text-destructive">{recordingError}</p>
+              ) : null}
             </div>
             <div className="flex-1 overflow-hidden rounded-lg border bg-background">
               <div ref={chatContainerRef} className="h-80 space-y-4 overflow-y-auto p-4 text-sm">

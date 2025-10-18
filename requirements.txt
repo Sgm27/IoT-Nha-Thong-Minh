@@ -5,3 +5,4 @@ pydantic
 
 # Gemini integration
 google-genai
+python-dotenv
