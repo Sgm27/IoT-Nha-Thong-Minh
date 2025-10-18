@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import binascii
 import datetime as dt
 import json
 import logging
@@ -156,7 +157,23 @@ class GeminiService:
                         payload = chunk.get("data")
                         if not payload:
                             continue
-                        blob = types.Blob(data=payload, mime_type=mime)
+
+                        payload_bytes: Optional[bytes]
+                        if isinstance(payload, str):
+                            try:
+                                payload_bytes = base64.b64decode(payload)
+                            except (ValueError, binascii.Error):
+                                logger.warning("Không thể giải mã dữ liệu realtime_input")
+                                payload_bytes = None
+                        elif isinstance(payload, (bytes, bytearray)):
+                            payload_bytes = bytes(payload)
+                        else:
+                            payload_bytes = None
+
+                        if not payload_bytes:
+                            continue
+
+                        blob = types.Blob(data=payload_bytes, mime_type=mime)
                         await session.send_realtime_input(
                             audio=blob if mime.startswith("audio/") else None,
                             media=blob if mime.startswith("image/") else None,
