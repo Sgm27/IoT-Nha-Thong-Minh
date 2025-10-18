@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import base64
 import binascii
 import datetime as dt
@@ -100,20 +101,19 @@ class GeminiService:
                 )
                 ping_task = asyncio.create_task(self._ping_websocket(websocket))
 
-                done, pending = await asyncio.wait(
-                    [send_task, receive_task, ping_task],
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for task in pending:
-                    task.cancel()
-                for task in done:
-                    task.result()
+                await asyncio.gather(send_task, receive_task, ping_task)
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected by client")
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Unexpected error in Gemini websocket handler")
         finally:
-            for task in filter(None, [send_task, receive_task, ping_task]):
+            tasks = [task for task in [send_task, receive_task, ping_task] if task]
+            for task in tasks:
                 if not task.done():
                     task.cancel()
+            for task in tasks:
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
             self._send_locks.pop(websocket, None)
 
     async def _run_offline_loop(self, websocket: WebSocket) -> None:
