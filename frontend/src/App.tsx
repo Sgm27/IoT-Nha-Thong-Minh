@@ -183,10 +183,11 @@ export default function App() {
   const currentAssistantMessageIdRef = useRef<string | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
-  const recordingProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const recordingProcessorRef = useRef<AudioWorkletNode | null>(null);
   const recordingSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const recordingGainNodeRef = useRef<GainNode | null>(null);
   const pendingInputSamplesRef = useRef<Float32Array | null>(null);
+  const recordingWorkletLoadedRef = useRef<boolean>(false);
 
   const showFeedback = useCallback((message: string, isError = false) => {
     setFeedback({ message, isError });
@@ -746,7 +747,12 @@ export default function App() {
     const processor = recordingProcessorRef.current;
     if (processor) {
       processor.disconnect();
-      processor.onaudioprocess = null;
+      processor.port.onmessage = null;
+      try {
+        processor.port.close();
+      } catch (error) {
+        // Ignore closing errors – the port may already be closed.
+      }
       recordingProcessorRef.current = null;
     }
 
@@ -837,9 +843,6 @@ export default function App() {
       const source = recordingContext.createMediaStreamSource(stream);
       recordingSourceRef.current = source;
 
-      const processor = recordingContext.createScriptProcessor(4096, 1, 1);
-      recordingProcessorRef.current = processor;
-
       const gainNode = recordingContext.createGain();
       gainNode.gain.value = 0;
       recordingGainNodeRef.current = gainNode;
@@ -847,9 +850,36 @@ export default function App() {
       const pcmChunkSize = Math.max(1, Math.floor((INPUT_SAMPLE_RATE * PCM_CHUNK_DURATION_MS) / 1000));
       const contextSampleRate = recordingContext.sampleRate;
 
-      processor.onaudioprocess = (event) => {
-        const channelData = event.inputBuffer.getChannelData(0);
-        if (channelData.length === 0) {
+      if (!("audioWorklet" in recordingContext)) {
+        setRecordingError("Trình duyệt không hỗ trợ AudioWorklet.");
+        stopRecording();
+        return;
+      }
+
+      if (!recordingWorkletLoadedRef.current) {
+        try {
+          await recordingContext.audioWorklet.addModule(
+            new URL("./worklets/pcm-worklet-processor.js", import.meta.url)
+          );
+          recordingWorkletLoadedRef.current = true;
+        } catch (error) {
+          console.error("Không thể tải audio worklet", error);
+          setRecordingError("Không thể khởi động micro. Vui lòng thử lại.");
+          stopRecording();
+          return;
+        }
+      }
+
+      const processor = new AudioWorkletNode(recordingContext, "pcm-worklet-processor", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1]
+      });
+      recordingProcessorRef.current = processor;
+
+      processor.port.onmessage = (event) => {
+        const channelData = event.data as Float32Array | null;
+        if (!(channelData instanceof Float32Array) || channelData.length === 0) {
           return;
         }
 
