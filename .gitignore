@@ -64,8 +64,6 @@ frontend/yarn-error.log*
 frontend/pnpm-debug.log*
 
 # Project specific
-data/
-music/
 logs/
 *.log
 temp/
