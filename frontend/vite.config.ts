@@ -3,6 +3,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 
 // https://vitejs.dev/config/
+const backendTarget = process.env.VITE_BACKEND_URL ?? "http://localhost:8000";
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -15,7 +17,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/smart-home": {
-        target: "http://localhost:8000",
+        target: backendTarget,
+        changeOrigin: true,
+        ws: true
+      },
+      "/ws": {
+        target: backendTarget,
         changeOrigin: true,
         ws: true
       }
