@@ -135,14 +135,18 @@ class GeminiService:
     # Gemini streaming relays
     # ------------------------------------------------------------------
     async def _relay_client_to_gemini(self, websocket: WebSocket, session) -> None:
+        logger.info("🚀 Client -> Gemini relay started")
         try:
-            logger.info("🚀 Client -> Gemini relay started")
             while True:
-                message = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=settings.websocket_receive_timeout
-                )
+                try:
+                    message = await asyncio.wait_for(
+                        websocket.receive_text(), timeout=settings.websocket_receive_timeout
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Timeout waiting for client message")
+                    continue
+
                 data = json.loads(message)
-                logger.debug(f"📥 Received from client: {list(data.keys())}")
 
                 if "keepalive" in data:
                     await self._send_safely(
@@ -167,13 +171,10 @@ class GeminiService:
                                 payload_bytes = base64.b64decode(payload)
                             except (ValueError, binascii.Error):
                                 logger.warning("Không thể giải mã dữ liệu realtime_input")
-                                payload_bytes = None
+                                continue
                         elif isinstance(payload, (bytes, bytearray)):
                             payload_bytes = bytes(payload)
                         else:
-                            payload_bytes = None
-
-                        if not payload_bytes:
                             continue
 
                         blob = types.Blob(data=payload_bytes, mime_type=mime)
@@ -185,13 +186,11 @@ class GeminiService:
 
                 if "text" in data:
                     text_content = data["text"]
-                    logger.info(f"📝 Sending text to Gemini: {text_content}")
                     await session.send_client_content(
                         turns={"role": "user", "parts": [{"text": text_content}]},
                         turn_complete=True,
                     )
                     self._append_to_conversation_history("user", text_content)
-                    logger.info("✅ Text sent and saved to history")
                     continue
 
                 if "voice_notification_request" in data:
@@ -199,139 +198,109 @@ class GeminiService:
                         websocket, data["voice_notification_request"]
                     )
                     continue
-        except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for client message")
         except WebSocketDisconnect:
             logger.info("Client disconnected (send loop)")
         finally:
             logger.info("Client -> Gemini relay stopped")
 
     async def _relay_gemini_to_client(self, websocket: WebSocket, session) -> None:
+        logger.info("Gemini -> Client relay started")
         try:
-            while True:
-                try:
-                    async for response in session.receive():
-                        # Check if WebSocket is still connected before processing
-                        if hasattr(websocket, 'client_state') and websocket.client_state.name != 'CONNECTED':
-                            logger.warning("⚠️ WebSocket not connected, stopping receive")
-                            break
-                        
-                        if hasattr(response, "tool_call") and response.tool_call:
-                            await self._handle_tool_calls(websocket, session, response.tool_call)
-                            continue
-
-                        if response.server_content and response.server_content.output_transcription:
-                            transcription = response.server_content.output_transcription
-                            if transcription.text:
-                                self._current_assistant_output += transcription.text
-                                logger.info("Gemini transcript chunk:\n%s", transcription.text)
-                            await self._send_safely(
-                                websocket,
-                                {
-                                    "transcription": {
-                                        "text": transcription.text,
-                                        "sender": "Gemini",
-                                        "finished": transcription.finished,
-                                    }
-                                },
-                            )
-                            if transcription.finished and self._current_assistant_output.strip():
-                                logger.info(
-                                    "Gemini full transcript:\n%s",
-                                    self._current_assistant_output.strip(),
-                                )
-                                self._append_to_conversation_history(
-                                    "assistant", self._current_assistant_output.strip()
-                                )
-                                self._current_assistant_output = ""
-
-                        if response.server_content and response.server_content.input_transcription:
-                            transcription = response.server_content.input_transcription
-                            if transcription.text:
-                                self._current_user_input += transcription.text
-                                logger.info("🎤 User transcript chunk: %s", transcription.text)
-                            await self._send_safely(
-                                websocket,
-                                {
-                                    "transcription": {
-                                        "text": transcription.text,
-                                        "sender": "User",
-                                        "finished": transcription.finished,
-                                    }
-                                },
-                            )
-                            if transcription.finished and self._current_user_input.strip():
-                                logger.info(
-                                    "🎤✅ User full transcript (FINISHED):\n%s",
-                                    self._current_user_input.strip(),
-                                )
-                                logger.info("🔄 User đã nói xong, Gemini sẽ bắt đầu xử lý...")
-                                self._append_to_conversation_history(
-                                    "user", self._current_user_input.strip()
-                                )
-                                self._current_user_input = ""
-
-                        if response.server_content and response.server_content.model_turn:
-                            for part in response.server_content.model_turn.parts:
-                                if getattr(part, "text", None):
-                                    await self._send_safely(websocket, {"text": part.text})
-                                if getattr(part, "inline_data", None):
-                                    await self._enqueue_audio_chunk(websocket, part.inline_data)
-
-                        if response.session_resumption_update:
-                            update = response.session_resumption_update
-                            if update.resumable and update.new_handle:
-                                self.session_service.save_previous_session_handle(update.new_handle)
-
-                        if response.server_content and response.server_content.turn_complete:
-                            logger.info("\n<Turn complete>")
-                            logger.info("=" * 50)
-                            logger.info("🎯 Turn hoàn thành, sẵn sàng nhận input tiếp theo")
-                            
-                            # Send turn complete signal to client
-                            await self._send_safely(
-                                websocket,
-                                {
-                                    "transcription": {
-                                        "text": "",
-                                        "sender": "Gemini",
-                                        "finished": True
-                                    }
-                                },
-                            )
-                            logger.info("✅ Đã gửi tín hiệu turn_complete về client")
-                            
-                            # Persist any remaining buffered texts at end of turn
-                            if self._current_user_input.strip():
-                                self._append_to_conversation_history(
-                                    "user", self._current_user_input.strip()
-                                )
-                                self._current_user_input = ""
-                                logger.info("💾 Đã lưu user input vào lịch sử")
-                            
-                            if self._current_assistant_output.strip():
-                                self._append_to_conversation_history(
-                                    "assistant", self._current_assistant_output.strip()
-                                )
-                                self._current_assistant_output = ""
-                                logger.info("💾 Đã lưu assistant output vào lịch sử")
-                
-                except WebSocketDisconnect:
-                    logger.info("WebSocket disconnected during receive")
+            async for response in session.receive():
+                if (
+                    hasattr(websocket, "client_state")
+                    and websocket.client_state.name != "CONNECTED"
+                ):
+                    logger.warning("⚠️ WebSocket not connected, stopping receive")
                     break
-                except Exception as e:
-                    logger.error(f"❌ Error processing Gemini response: {e}")
-                    logger.exception("Full traceback:")
-                    # Break on error to exit while loop
-                    break
-                    
+
+                if getattr(response, "tool_call", None):
+                    await self._handle_tool_calls(websocket, session, response.tool_call)
+                    continue
+
+                if response.server_content and response.server_content.output_transcription:
+                    transcription = response.server_content.output_transcription
+                    if transcription.text:
+                        self._current_assistant_output += transcription.text
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "transcription": {
+                                "text": transcription.text,
+                                "sender": "Gemini",
+                                "finished": transcription.finished,
+                            }
+                        },
+                    )
+                    if transcription.finished and self._current_assistant_output.strip():
+                        self._append_to_conversation_history(
+                            "assistant", self._current_assistant_output.strip()
+                        )
+                        self._current_assistant_output = ""
+
+                if response.server_content and response.server_content.input_transcription:
+                    transcription = response.server_content.input_transcription
+                    if transcription.text:
+                        self._current_user_input += transcription.text
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "transcription": {
+                                "text": transcription.text,
+                                "sender": "User",
+                                "finished": transcription.finished,
+                            }
+                        },
+                    )
+                    if transcription.finished and self._current_user_input.strip():
+                        self._append_to_conversation_history(
+                            "user", self._current_user_input.strip()
+                        )
+                        self._current_user_input = ""
+
+                if response.server_content and response.server_content.model_turn:
+                    for part in response.server_content.model_turn.parts:
+                        if getattr(part, "text", None):
+                            await self._send_safely(websocket, {"text": part.text})
+                        if getattr(part, "inline_data", None):
+                            await self._enqueue_audio_chunk(websocket, part.inline_data)
+
+                if response.session_resumption_update:
+                    update = response.session_resumption_update
+                    if update.resumable and update.new_handle:
+                        self.session_service.save_previous_session_handle(update.new_handle)
+
+                if response.server_content and response.server_content.turn_complete:
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "transcription": {
+                                "text": "",
+                                "sender": "Gemini",
+                                "finished": True,
+                            }
+                        },
+                    )
+
+                    if self._current_user_input.strip():
+                        self._append_to_conversation_history(
+                            "user", self._current_user_input.strip()
+                        )
+                        self._current_user_input = ""
+
+                    if self._current_assistant_output.strip():
+                        self._append_to_conversation_history(
+                            "assistant", self._current_assistant_output.strip()
+                        )
+                        self._current_assistant_output = ""
+
         except WebSocketDisconnect:
-            logger.info("Client disconnected (receive loop)")
+            logger.info("WebSocket disconnected during receive")
         except asyncio.CancelledError:
             logger.info("Receive task cancelled")
-        except Exception as e:
-            logger.error(f"❌ Fatal error in receive loop: {e}")
-            logger.exception("Full traceback:")
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("❌ Fatal error in receive loop")
         finally:
             logger.info("Gemini -> Client relay stopped")
 
