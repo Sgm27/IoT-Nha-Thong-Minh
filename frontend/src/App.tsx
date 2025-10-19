@@ -89,6 +89,10 @@ const INPUT_SAMPLE_RATE = 16000; // Sample rate expected by Gemini Live for inco
 const OUTPUT_SAMPLE_RATE = 24000; // Sample rate returned by Gemini Live when synthesising speech
 const PCM_CHUNK_DURATION_MS = 100; // Chunk microphone audio in ~100ms windows for streaming
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024; // Cap image uploads at 4MB to keep websocket payload reasonable
+const CAMERA_FRAME_INTERVAL_MS = 500; // Capture frames from the camera every 0.5s
+const CAMERA_MAX_DIMENSION = 720; // Downscale camera frames so the longest edge is 720px
+const CAMERA_IMAGE_MIME_TYPE = "image/jpeg";
+const CAMERA_IMAGE_QUALITY = 0.75;
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   let binary = "";
@@ -368,6 +372,8 @@ export default function App() {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [isMicPermissionDenied, setIsMicPermissionDenied] = useState<boolean>(false);
+  const [isCameraStreaming, setIsCameraStreaming] = useState<boolean>(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const reconnectTimer = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const geminiSocketRef = useRef<WebSocket | null>(null);
@@ -387,6 +393,11 @@ export default function App() {
   const pendingInputSamplesRef = useRef<Float32Array | null>(null);
   const recordingWorkletContextRef = useRef<AudioContext | null>(null);
   const autoplayUnlockCleanupRef = useRef<(() => void) | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cameraCaptureTimerRef = useRef<number | null>(null);
+  const cameraSendingRef = useRef<boolean>(false);
 
   const showFeedback = useCallback((message: string, isError = false) => {
     setFeedback({ message, isError });
@@ -413,6 +424,185 @@ export default function App() {
     }
   }, []);
 
+  const stopCameraStream = useCallback(() => {
+    if (cameraCaptureTimerRef.current) {
+      window.clearInterval(cameraCaptureTimerRef.current);
+      cameraCaptureTimerRef.current = null;
+    }
+
+    cameraSendingRef.current = false;
+
+    const stream = cameraStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore stop errors
+        }
+      });
+      cameraStreamRef.current = null;
+    }
+
+    const video = cameraVideoRef.current;
+    if (video) {
+      try {
+        video.pause();
+      } catch {
+        // ignore pause errors
+      }
+      video.srcObject = null;
+    }
+
+    setIsCameraStreaming(false);
+  }, []);
+
+  const captureAndSendCameraFrame = useCallback(async () => {
+    if (cameraSendingRef.current) {
+      return;
+    }
+
+    const socket = geminiSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const video = cameraVideoRef.current;
+    if (!video || !cameraStreamRef.current) {
+      return;
+    }
+
+    const { videoWidth, videoHeight, readyState } = video;
+    if (!videoWidth || !videoHeight || readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      return;
+    }
+
+    const canvas = cameraCanvasRef.current ?? document.createElement("canvas");
+    cameraCanvasRef.current = canvas;
+
+    const longestEdge = Math.max(videoWidth, videoHeight);
+    const scale = longestEdge > CAMERA_MAX_DIMENSION ? CAMERA_MAX_DIMENSION / longestEdge : 1;
+    const targetWidth = Math.max(1, Math.round(videoWidth * scale));
+    const targetHeight = Math.max(1, Math.round(videoHeight * scale));
+
+    if (canvas.width !== targetWidth) {
+      canvas.width = targetWidth;
+    }
+    if (canvas.height !== targetHeight) {
+      canvas.height = targetHeight;
+    }
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.drawImage(video, 0, 0, targetWidth, targetHeight);
+
+    cameraSendingRef.current = true;
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((result) => resolve(result), CAMERA_IMAGE_MIME_TYPE, CAMERA_IMAGE_QUALITY)
+      );
+      if (!blob) {
+        return;
+      }
+
+      if (blob.size > MAX_IMAGE_SIZE_BYTES) {
+        console.warn("Camera frame skipped because it exceeds the size limit");
+        return;
+      }
+
+      const buffer = await blob.arrayBuffer();
+      const base64 = arrayBufferToBase64(buffer);
+      const mimeType = blob.type || CAMERA_IMAGE_MIME_TYPE;
+
+      socket.send(
+        JSON.stringify({
+          realtime_input: {
+            media_chunks: [
+              {
+                mime_type: mimeType,
+                data: base64
+              }
+            ]
+          }
+        })
+      );
+    } catch (error) {
+      console.error("Không thể gửi khung hình từ camera tới Gemini", error);
+    } finally {
+      cameraSendingRef.current = false;
+    }
+  }, []);
+
+  const startCameraStream = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      const message = "Thiết bị không hỗ trợ camera.";
+      setCameraError(message);
+      showFeedback(message, true);
+      return;
+    }
+
+    setCameraError(null);
+
+    if (cameraCaptureTimerRef.current) {
+      window.clearInterval(cameraCaptureTimerRef.current);
+      cameraCaptureTimerRef.current = null;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: CAMERA_MAX_DIMENSION },
+          height: { ideal: CAMERA_MAX_DIMENSION }
+        },
+        audio: false
+      });
+
+      cameraStreamRef.current = stream;
+
+      const video = cameraVideoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        video.playsInline = true;
+        video.muted = true;
+        const playPromise = video.play();
+        if (playPromise) {
+          void playPromise.catch(() => undefined);
+        }
+      }
+
+      setIsCameraStreaming(true);
+
+      cameraCaptureTimerRef.current = window.setInterval(() => {
+        void captureAndSendCameraFrame();
+      }, CAMERA_FRAME_INTERVAL_MS);
+    } catch (error) {
+      console.error("Không thể bật camera", error);
+
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        const message = "Truy cập camera bị từ chối. Vui lòng kiểm tra quyền của trình duyệt.";
+        setCameraError(message);
+        showFeedback(message, true);
+      } else {
+        const message = "Không thể bật camera. Vui lòng thử lại.";
+        setCameraError(message);
+        showFeedback(message, true);
+      }
+
+      stopCameraStream();
+    }
+  }, [captureAndSendCameraFrame, showFeedback, stopCameraStream]);
+
+  const toggleCameraStream = useCallback(() => {
+    if (isCameraStreaming) {
+      stopCameraStream();
+    } else {
+      void startCameraStream();
+    }
+  }, [isCameraStreaming, startCameraStream, stopCameraStream]);
+
   useEffect(() => {
     return () => {
       if (selectedImagePreview?.startsWith("blob:")) {
@@ -420,6 +610,21 @@ export default function App() {
       }
     };
   }, [selectedImagePreview]);
+
+  useEffect(() => {
+    return () => {
+      stopCameraStream();
+    };
+  }, [stopCameraStream]);
+
+  useEffect(() => {
+    if (!isGeminiConnected && isCameraStreaming) {
+      const message = "Mất kết nối với Gemini. Camera đã tắt.";
+      setCameraError(message);
+      showFeedback(message, true);
+      stopCameraStream();
+    }
+  }, [isCameraStreaming, isGeminiConnected, showFeedback, stopCameraStream]);
 
   const applyLightSnapshot = useCallback((snapshot: LightState[]) => {
     const validLights = snapshot
@@ -1658,6 +1863,49 @@ export default function App() {
               {recordingError ? (
                 <p className="text-xs text-destructive">{recordingError}</p>
               ) : null}
+            </div>
+            <div className="flex flex-col gap-3 rounded-lg border bg-background px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={isCameraStreaming ? "default" : "secondary"}
+                    onClick={toggleCameraStream}
+                    disabled={!isGeminiConnected}
+                  >
+                    {isCameraStreaming ? "Tắt camera" : "Bật camera"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {isCameraStreaming
+                      ? "Đang gửi hình ảnh từ camera tới Gemini"
+                      : "Nhấn để chia sẻ hình ảnh trực tiếp với Gemini"}
+                  </span>
+                </div>
+                {!isGeminiConnected ? (
+                  <span className="text-xs text-muted-foreground">Cần kết nối Gemini để sử dụng camera</span>
+                ) : null}
+              </div>
+              {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
+              <div className="relative h-48 w-full">
+                <video
+                  ref={cameraVideoRef}
+                  className={cn(
+                    "absolute inset-0 h-full w-full rounded-md border object-cover transition-opacity",
+                    isCameraStreaming ? "opacity-100" : "pointer-events-none opacity-0"
+                  )}
+                  autoPlay
+                  muted
+                  playsInline
+                />
+                <div
+                  className={cn(
+                    "absolute inset-0 flex items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground transition-opacity",
+                    isCameraStreaming ? "pointer-events-none opacity-0" : "opacity-100"
+                  )}
+                >
+                  Camera đang tắt
+                </div>
+              </div>
             </div>
             <div className="rounded-lg border bg-background px-4 py-3 text-sm">
               <div className="flex flex-col gap-3">
