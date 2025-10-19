@@ -378,5 +378,585 @@
     "role": "assistant",
     "text": "Tôi xin lỗi, tôi không tìm thấy bài hát \"Kho báu\". Bạn có muốn tôi thử tìm bài hát khác không?",
     "timestamp": "2025-10-18T14:38:50.290314"
+  },
+  {
+    "role": "user",
+    "text": "Chào bạn, hãy bật bài người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-18T14:51:21.989501"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi đã bật bài \"Người như anh xứng đáng cô đơn\" rồi nhé.",
+    "timestamp": "2025-10-18T14:51:21.989891"
+  },
+  {
+    "role": "user",
+    "text": "Hello, bạn nghe đó tôi nói không?",
+    "timestamp": "2025-10-18T15:01:10.726702"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi nghe rõ. Bạn cần tôi giúp gì ạ?",
+    "timestamp": "2025-10-18T15:01:10.727137"
+  },
+  {
+    "role": "user",
+    "text": "Bạn hãy bật cho tôi bài người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-18T15:01:26.171190"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã rõ. Tôi đang phát bài \"Người Như Anh Xứng Đáng Cô Đơn\" cho bạn.",
+    "timestamp": "2025-10-18T15:01:26.171690"
+  },
+  {
+    "role": "user",
+    "text": "Tại sao vẫn chưa bật lên?",
+    "timestamp": "2025-10-18T15:01:42.842213"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã gửi yêu cầu phát nhạc rồi ạ. Có thể có một chút độ trễ nhỏ. Bạn vui lòng đợi trong giây lát nhé.",
+    "timestamp": "2025-10-18T15:01:42.842647"
+  },
+  {
+    "role": "user",
+    "text": "Bạn hãy bật đèn số một cho tôi đi.",
+    "timestamp": "2025-10-18T15:01:59.088122"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn số 1 đã được bật rồi ạ.",
+    "timestamp": "2025-10-18T15:01:59.088574"
+  },
+  {
+    "role": "user",
+    "text": "Bạn hãy bật đèn phòng ngủ cho tôi đi.",
+    "timestamp": "2025-10-18T15:02:06.432052"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật đèn phòng ngủ cho bạn.",
+    "timestamp": "2025-10-18T15:02:06.433426"
+  },
+  {
+    "role": "user",
+    "text": "Tiếp theo đó bạn tắt đèn phòng khách đi.",
+    "timestamp": "2025-10-18T15:02:16.606953"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tắt đèn phòng khách cho bạn rồi ạ.",
+    "timestamp": "2025-10-18T15:02:16.607483"
+  },
+  {
+    "role": "user",
+    "text": "Tôi muốn bản tắt đèn nhà bếp.",
+    "timestamp": "2025-10-18T15:02:24.135532"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tắt đèn nhà bếp cho bạn.",
+    "timestamp": "2025-10-18T15:02:24.135967"
+  },
+  {
+    "role": "user",
+    "text": "Chào bạn, có nghe nói tôi nói gì không?",
+    "timestamp": "2025-10-18T15:32:46.504246"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi nghe rõ ạ. Bạn cần tôi giúp gì không?",
+    "timestamp": "2025-10-18T15:32:46.504760"
+  },
+  {
+    "role": "user",
+    "text": "Hay bật đèn số một đi.",
+    "timestamp": "2025-10-18T15:32:54.468667"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn số 1 đã được bật rồi ạ.",
+    "timestamp": "2025-10-18T15:32:54.469085"
+  },
+  {
+    "role": "user",
+    "text": "Thế thì hãy tắt đèn số một đi.",
+    "timestamp": "2025-10-18T15:33:02.760774"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn số 1 đã được tắt rồi ạ.",
+    "timestamp": "2025-10-18T15:33:02.761245"
+  },
+  {
+    "role": "user",
+    "text": "Bây giờ hãy mặt điền băng công đi.",
+    "timestamp": "2025-10-18T15:33:11.564212"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ban công đã được bật.",
+    "timestamp": "2025-10-18T15:33:11.564699"
+  },
+  {
+    "role": "user",
+    "text": "Hãy phát bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-18T15:33:20.637361"
+  },
+  {
+    "role": "assistant",
+    "text": "Bài hát 'Người như anh xứng đáng cô đơn' đang được phát.",
+    "timestamp": "2025-10-18T15:33:20.637842"
+  },
+  {
+    "role": "user",
+    "text": "Hay bật cho tôi bài hát người như anh sưng đáng cô đơn.",
+    "timestamp": "2025-10-18T15:42:16.464695"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Người Như Anh Xứng Đáng Cô Đơn\" rồi ạ. Bạn có muốn nghe thêm bài nào nữa không?",
+    "timestamp": "2025-10-18T15:42:16.465238"
+  },
+  {
+    "role": "user",
+    "text": "Hãy bật cho tôi bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-18T15:43:03.084835"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã bật bài hát \"Người Như Anh Xứng Đáng Cô Đơn\" rồi ạ. Bạn có muốn nghe bài hát nào khác không?",
+    "timestamp": "2025-10-18T15:43:03.085364"
+  },
+  {
+    "role": "user",
+    "text": "Chào bạn.",
+    "timestamp": "2025-10-18T15:44:46.588220"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay?",
+    "timestamp": "2025-10-18T15:44:46.588793"
+  },
+  {
+    "role": "user",
+    "text": "Bạn có thể nhớ tên tôi được không? Tôi tên là Ngô Đức Sơn.",
+    "timestamp": "2025-10-18T15:45:02.188547"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào anh Ngô Đức Sơn, tôi rất vui được làm quen với anh. Tôi đã ghi nhớ tên của anh rồi ạ. Anh cần tôi hỗ trợ gì không?",
+    "timestamp": "2025-10-18T15:45:02.189024"
+  },
+  {
+    "role": "user",
+    "text": "Bật đèn ban công cho tôi đi.",
+    "timestamp": "2025-10-18T15:45:16.692013"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ban công đã được bật rồi ạ. Anh Ngô Đức Sơn có cần tôi bật thêm đèn ở đâu nữa không?",
+    "timestamp": "2025-10-18T15:45:16.692515"
+  },
+  {
+    "role": "user",
+    "text": "Phát cho tôi bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-18T15:45:29.999436"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã phát bài hát \"Người Như Anh Xứng Đáng Cô Đơn\" rồi ạ. Anh Ngô Đức Sơn có muốn nghe bài hát nào khác không?",
+    "timestamp": "2025-10-18T15:45:30.000027"
+  },
+  {
+    "role": "user",
+    "text": "tôi bài hát kho báu.\" <noise>",
+    "timestamp": "2025-10-18T15:45:45.228252"
+  },
+  {
+    "role": "assistant",
+    "text": "Rất tiếc, tôi không tìm thấy bài hát \"Kho Báu\" trong thư viện của mình. Anh Ngô Đức Sơn có muốn tôi tìm bài hát nào khác không?",
+    "timestamp": "2025-10-18T15:45:45.228772"
+  },
+  {
+    "role": "user",
+    "text": "Phát cho tôi bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-18T15:50:57.608811"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã phát bài hát \"Người Như Anh Xứng Đáng Cô Đơn\" rồi ạ. Anh Ngô Đức Sơn có muốn nghe bài hát nào khác không?",
+    "timestamp": "2025-10-18T15:50:57.609366"
+  },
+  {
+    "role": "user",
+    "text": "Phát cho tôi bài hát kho báu đi.",
+    "timestamp": "2025-10-18T15:51:20.269620"
+  },
+  {
+    "role": "assistant",
+    "text": "Rất tiếc, tôi vẫn không tìm thấy bài hát \"Kho Báu\" trong thư viện của mình. Anh Ngô Đức Sơn có muốn tôi tìm bài hát khác không?",
+    "timestamp": "2025-10-18T15:51:20.270149"
+  },
+  {
+    "role": "user",
+    "text": "Bật đèn ban công.",
+    "timestamp": "2025-10-18T15:51:30.894415"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ban công đã được bật rồi ạ. Anh Ngô Đức Sơn có cần tôi hỗ trợ gì khác không?",
+    "timestamp": "2025-10-18T15:51:30.894933"
+  },
+  {
+    "role": "user",
+    "text": "Bật đèn nhà tắm.",
+    "timestamp": "2025-10-18T15:51:43.246491"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn nhà tắm đã được bật rồi ạ. Anh Ngô Đức Sơn có cần tôi bật thêm đèn ở đâu nữa không?",
+    "timestamp": "2025-10-18T15:51:43.247027"
+  },
+  {
+    "role": "user",
+    "text": "นะ คะ",
+    "timestamp": "2025-10-18T15:51:59.104408"
+  },
+  {
+    "role": "assistant",
+    "text": "Anh Ngô Đức Sơn có cần tôi hỗ trợ gì khác không?",
+    "timestamp": "2025-10-18T15:51:59.104955"
+  },
+  {
+    "role": "user",
+    "text": "Bài nơi đây mượn hắn như ngọc.",
+    "timestamp": "2025-10-18T15:52:20.525330"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có thể nhắc lại tên bài hát rõ hơn một chút được không ạ?",
+    "timestamp": "2025-10-18T15:52:20.525885"
+  },
+  {
+    "role": "user",
+    "text": "Cho tôi biết hình ảnh tên là gì?",
+    "timestamp": "2025-10-18T16:12:58.404802"
+  },
+  {
+    "role": "assistant",
+    "text": "Hình ảnh này là một ảnh chụp màn hình của giao diện phpMyAdmin, hiển thị bảng \"law_documents\" trong cơ sở dữ liệu \"myDatabase\".",
+    "timestamp": "2025-10-18T16:12:58.405429"
+  },
+  {
+    "role": "user",
+    "text": "bản phát cho tôi bài người như anh xứng nắng cô đơn được không?",
+    "timestamp": "2025-10-18T16:13:11.868669"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã phát bài \"Người Như Anh Xứng Đáng Cô Đơn\" rồi ạ.",
+    "timestamp": "2025-10-18T16:13:11.869246"
+  },
+  {
+    "role": "user",
+    "text": "Chào bạn.",
+    "timestamp": "2025-10-18T16:20:21.116405"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay?",
+    "timestamp": "2025-10-18T16:20:21.116982"
+  },
+  {
+    "role": "user",
+    "text": "Bật đèn phòng ngủ đi.",
+    "timestamp": "2025-10-18T16:20:30.725399"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật đèn phòng ngủ cho bạn.",
+    "timestamp": "2025-10-18T16:20:30.725942"
+  },
+  {
+    "role": "user",
+    "text": "Tắt đèn phòng ngủ đi.",
+    "timestamp": "2025-10-18T16:20:40.954049"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tắt đèn phòng ngủ cho bạn.",
+    "timestamp": "2025-10-18T16:20:40.954659"
+  },
+  {
+    "role": "user",
+    "text": "Hãy bật điện nhà tắm đi.",
+    "timestamp": "2025-10-18T16:20:51.177364"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật đèn nhà tắm cho bạn.",
+    "timestamp": "2025-10-18T16:20:51.177975"
+  },
+  {
+    "role": "user",
+    "text": "Rồi tắt ở nhà tắt nha.",
+    "timestamp": "2025-10-18T16:21:01.230397"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tắt đèn nhà tắm cho bạn.",
+    "timestamp": "2025-10-18T16:21:01.230961"
+  },
+  {
+    "role": "user",
+    "text": "Phát cho tôi bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-18T16:21:14.064296"
+  },
+  {
+    "role": "assistant",
+    "text": "Đang phát bài Người Như Anh Xứng Đáng Cô Đơn. Chúc bạn nghe nhạc vui vẻ.",
+    "timestamp": "2025-10-18T16:21:14.064931"
+  },
+  {
+    "role": "user",
+    "text": "Hãy tắt điểm ăn công nghệ thôi.",
+    "timestamp": "2025-10-19T02:21:43.959668"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ở ban công đã được tắt rồi ạ.",
+    "timestamp": "2025-10-19T02:21:43.960487"
+  },
+  {
+    "role": "user",
+    "text": "Hình ảnh tôi vừa gửi là cái gì đấy?",
+    "timestamp": "2025-10-19T02:22:00.668366"
+  },
+  {
+    "role": "assistant",
+    "text": "Hình ảnh bạn gửi là một hóa đơn hoặc phiếu thu, trên đó có ghi các thông tin như:\n\n*   **Người thụ hưởng:** Nguyễn Hữu Hùng.\n*   **Nội dung:** Chuyển quyền nhà và đất.\n*   **Số tiền:** 307.700.000 đồng, 117.888.887 đồng và 86.858.693 đồng.\n*   **Tổng cộng tiền thanh toán:** 516.986.783 đồng.\n\nHóa đơn này có vẻ liên quan đến việc mua bán hoặc chuyển nhượng bất động sản.",
+    "timestamp": "2025-10-19T02:22:00.669054"
+  },
+  {
+    "role": "user",
+    "text": "Ok ok.",
+    "timestamp": "2025-10-19T02:22:02.363085"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có cần tôi hỗ trợ gì khác không ạ?",
+    "timestamp": "2025-10-19T02:22:02.363738"
+  },
+  {
+    "role": "user",
+    "text": "ปั๊บ ๆ ๆ ๆ",
+    "timestamp": "2025-10-19T02:22:05.361319"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn tôi giúp gì nữa ạ?",
+    "timestamp": "2025-10-19T02:22:05.361939"
+  },
+  {
+    "role": "user",
+    "text": "Hãy phát cho tôi bài hát người như anh xứng đáng cô ơi.",
+    "timestamp": "2025-10-19T02:22:44.048650"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tìm thấy bài \"NGƯỜI NHƯ ANH XỨNG ĐÁNG CÔ ĐƠN\" và đang phát rồi ạ.",
+    "timestamp": "2025-10-19T02:22:44.049352"
+  },
+  {
+    "role": "user",
+    "text": "Tôi vừa yêu cầu bạn là",
+    "timestamp": "2025-10-19T02:23:18.734180"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn đã yêu cầu tôi phát bài hát \"Người Như Anh Xứng Đáng Cô Ấy\" và tôi đã tìm thấy bài \"NGƯỜI NHƯ ANH XỨNG ĐÁNG CÔ ĐƠN\" để phát cho bạn.",
+    "timestamp": "2025-10-19T02:23:18.734768"
+  },
+  {
+    "role": "user",
+    "text": "Dừng phát nhạc.",
+    "timestamp": "2025-10-19T02:23:48.029783"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng phát nhạc rồi ạ.",
+    "timestamp": "2025-10-19T02:23:48.030444"
+  },
+  {
+    "role": "user",
+    "text": "Tiếp tục phát bài hát hiện tại.",
+    "timestamp": "2025-10-19T02:24:01.062625"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tiếp tục phát bài hát \"NGƯỜI NHƯ ANH XỨNG ĐÁNG CÔ ĐƠN\" rồi ạ.",
+    "timestamp": "2025-10-19T02:24:01.063302"
+  },
+  {
+    "role": "user",
+    "text": "Dừng phát nhạc.",
+    "timestamp": "2025-10-19T02:24:08.958662"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng phát nhạc rồi ạ.",
+    "timestamp": "2025-10-19T02:24:08.959454"
+  },
+  {
+    "role": "user",
+    "text": "Phát loại từ đầu bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-19T02:24:23.308427"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã phát lại bài \"NGƯỜI NHƯ ANH XỨNG ĐÁNG CÔ ĐƠN\" từ đầu rồi ạ.",
+    "timestamp": "2025-10-19T02:24:23.309206"
+  },
+  {
+    "role": "user",
+    "text": "Dừng khác nhau.",
+    "timestamp": "2025-10-19T02:24:33.678900"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng phát nhạc rồi ạ.",
+    "timestamp": "2025-10-19T02:24:33.679575"
+  },
+  {
+    "role": "user",
+    "text": "Tắt đèn nhà bếp đi.",
+    "timestamp": "2025-10-19T02:24:44.065674"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ở nhà bếp đã được tắt rồi ạ.",
+    "timestamp": "2025-10-19T02:24:44.066363"
+  },
+  {
+    "role": "user",
+    "text": "Tiếp tục phát bài hát từ",
+    "timestamp": "2025-10-19T02:24:59.256158"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tiếp tục phát bài hát \"NGƯỜI NHƯ ANH XỨNG ĐÁNG CÔ ĐƠN\" rồi ạ.",
+    "timestamp": "2025-10-19T02:24:59.256840"
+  },
+  {
+    "role": "user",
+    "text": "Dừng phát nhạc.",
+    "timestamp": "2025-10-19T02:25:12.850249"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng phát nhạc rồi ạ.",
+    "timestamp": "2025-10-19T02:25:12.850964"
+  },
+  {
+    "role": "user",
+    "text": "你",
+    "timestamp": "2025-10-19T02:25:24.910831"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn tôi giúp gì nữa ạ?",
+    "timestamp": "2025-10-19T02:25:24.911664"
+  },
+  {
+    "role": "user",
+    "text": "phát bài hát như vậy.",
+    "timestamp": "2025-10-19T02:25:36.925456"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn tôi phát bài hát nào ạ?",
+    "timestamp": "2025-10-19T02:25:36.926167"
+  },
+  {
+    "role": "user",
+    "text": "Tiếp tục phát bài hát và đang dừng ấy.",
+    "timestamp": "2025-10-19T02:25:47.231333"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tiếp tục phát bài hát \"NGƯỜI NHƯ ANH XỨNG ĐÁNG CÔ ĐƠN\" rồi ạ.",
+    "timestamp": "2025-10-19T02:25:47.232023"
+  },
+  {
+    "role": "user",
+    "text": "<noise> Chào bạn. <noise>",
+    "timestamp": "2025-10-19T02:42:05.119077"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay ạ?",
+    "timestamp": "2025-10-19T02:42:05.119871"
+  },
+  {
+    "role": "user",
+    "text": "có chuyện cười đi.",
+    "timestamp": "2025-10-19T02:42:10.504174"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có muốn nghe một câu chuyện cười không?",
+    "timestamp": "2025-10-19T02:42:10.504866"
+  },
+  {
+    "role": "user",
+    "text": "Có kể đi.",
+    "timestamp": "2025-10-19T02:42:17.317548"
+  },
+  {
+    "role": "assistant",
+    "text": "Tại sao con cá không bao giờ chơi bóng đá? Vì nó sợ bị mắc lưới.",
+    "timestamp": "2025-10-19T02:42:17.318284"
+  },
+  {
+    "role": "user",
+    "text": "Có kết tội bài người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-10-19T02:42:25.280723"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài \"Người như anh xứng đáng cô đơn\" rồi ạ.",
+    "timestamp": "2025-10-19T02:42:25.281444"
+  },
+  {
+    "role": "user",
+    "text": "Hầm dừng bài hát đấy đi.",
+    "timestamp": "2025-10-19T02:42:32.770288"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng bài hát rồi ạ.",
+    "timestamp": "2025-10-19T02:42:32.771057"
+  },
+  {
+    "role": "user",
+    "text": "Bắt đèn là ban công đi.",
+    "timestamp": "2025-10-19T02:42:39.648725"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ở ban công đã được bật rồi ạ.",
+    "timestamp": "2025-10-19T02:42:39.649435"
+  },
+  {
+    "role": "user",
+    "text": "hello",
+    "timestamp": "2025-10-19T02:42:46.722732"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn ạ?",
+    "timestamp": "2025-10-19T02:42:49.934197"
   }
 ]

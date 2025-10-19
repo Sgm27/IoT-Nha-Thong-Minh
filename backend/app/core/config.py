@@ -54,6 +54,9 @@ class Settings:
             "SESSION_HANDLE_FILE", Path("data") / "session_handle.json"
         )
     )
+    session_timeout_seconds: int = field(
+        default_factory=lambda: _env_int("SESSION_TIMEOUT_SECONDS", 300)
+    )
     light_state_file: Path = field(
         default_factory=lambda: _env_path("LIGHT_STATE_FILE", Path("data") / "light_state.json")
     )

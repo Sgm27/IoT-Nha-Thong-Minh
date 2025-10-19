@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent
 } from "react";
@@ -44,6 +45,7 @@ interface ChatMessage {
   content: string;
   timestamp: number;
   streaming?: boolean;
+  imageDataUrl?: string;
 }
 
 interface MusicPlaybackResponse {
@@ -86,6 +88,7 @@ const sortLights = (lights: LightState[]) =>
 const INPUT_SAMPLE_RATE = 16000; // Sample rate expected by Gemini Live for incoming audio
 const OUTPUT_SAMPLE_RATE = 24000; // Sample rate returned by Gemini Live when synthesising speech
 const PCM_CHUNK_DURATION_MS = 100; // Chunk microphone audio in ~100ms windows for streaming
+const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024; // Cap image uploads at 4MB to keep websocket payload reasonable
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   let binary = "";
@@ -149,6 +152,189 @@ const float32ToPCM16 = (input: Float32Array) => {
   return buffer;
 };
 
+const isLikelyBase64String = (value: string) => {
+  if (!value || value.length % 4 !== 0) {
+    return false;
+  }
+
+  let padding = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 61) {
+      padding += 1;
+      if (padding > 2) {
+        return false;
+      }
+      const remaining = value.length - index;
+      if (remaining > 2) {
+        return false;
+      }
+      continue;
+    }
+    if (
+      (code >= 65 && code <= 90) || // A-Z
+      (code >= 97 && code <= 122) || // a-z
+      (code >= 48 && code <= 57) || // 0-9
+      code === 43 || // +
+      code === 47 // /
+    ) {
+      continue;
+    }
+    return false;
+  }
+
+  return true;
+};
+
+const formatFileSize = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const base64ToArrayBuffer = (base64: string): ArrayBuffer | null => {
+  if (!base64) {
+    return null;
+  }
+
+  let binary: string;
+  try {
+    binary = atob(base64);
+  } catch {
+    return null;
+  }
+
+  let depth = 0;
+  while (depth < 2 && isLikelyBase64String(binary)) {
+    depth += 1;
+    try {
+      const decoded = atob(binary);
+      if (!decoded || decoded === binary) {
+        break;
+      }
+      binary = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  const byteCount = binary.length;
+  if (byteCount === 0) {
+    return null;
+  }
+
+  const bytes = new Uint8Array(byteCount);
+  for (let index = 0; index < byteCount; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes.buffer;
+};
+
+const hasContainerHeader = (buffer: ArrayBuffer) => {
+  if (!buffer || buffer.byteLength < 4) {
+    return false;
+  }
+
+  const headerBytes = new Uint8Array(buffer.slice(0, 4));
+  const signature = String.fromCharCode(...headerBytes);
+  if (signature === "RIFF" || signature === "OggS" || signature === "fLaC") {
+    return true;
+  }
+  return signature.startsWith("ID3");
+};
+
+const mimeSuggestsContainer = (mimeType?: string) => {
+  if (!mimeType) {
+    return false;
+  }
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes("pcm")) {
+    return false;
+  }
+  return (
+    normalized.includes("ogg") ||
+    normalized.includes("mp3") ||
+    normalized.includes("webm") ||
+    normalized.includes("wav") ||
+    normalized.includes("flac")
+  );
+};
+
+const decodeAudioChunk = async (
+  buffer: ArrayBuffer,
+  context: AudioContext,
+  sourceSampleRate: number,
+  mimeType?: string
+): Promise<AudioBuffer | null> => {
+  if (!buffer || buffer.byteLength === 0) {
+    return null;
+  }
+
+  const shouldUseDecoder = mimeSuggestsContainer(mimeType) || hasContainerHeader(buffer);
+  if (shouldUseDecoder) {
+    try {
+      return await context.decodeAudioData(buffer.slice(0));
+    } catch (error) {
+      console.warn("Falling back to PCM decode for Gemini audio chunk", error);
+    }
+  }
+
+  const effectiveSampleRate =
+    typeof sourceSampleRate === "number" && Number.isFinite(sourceSampleRate) && sourceSampleRate > 0
+      ? sourceSampleRate
+      : OUTPUT_SAMPLE_RATE;
+
+  const isFloat32PCM = Boolean(mimeType && mimeType.toLowerCase().includes("bit=32"));
+  const bytesPerSample = isFloat32PCM ? 4 : 2;
+  const remainder = buffer.byteLength % bytesPerSample;
+  const alignedBuffer = remainder === 0 ? buffer : buffer.slice(0, buffer.byteLength - remainder);
+
+  if (alignedBuffer.byteLength === 0) {
+    return null;
+  }
+
+  let channelData: Float32Array;
+  if (isFloat32PCM) {
+    const floatView = new Float32Array(alignedBuffer);
+    channelData = floatView.length > 0 ? floatView.slice() : new Float32Array();
+  } else {
+    let pcm16: Int16Array;
+    try {
+      pcm16 = new Int16Array(alignedBuffer);
+    } catch {
+      return null;
+    }
+    if (pcm16.length === 0) {
+      return null;
+    }
+    channelData = new Float32Array(pcm16.length);
+    for (let index = 0; index < pcm16.length; index += 1) {
+      channelData[index] = pcm16[index] / 32768;
+    }
+  }
+
+  if (channelData.length === 0) {
+    return null;
+  }
+
+  const targetSampleRate = context.sampleRate || effectiveSampleRate;
+  const resampled =
+    targetSampleRate === effectiveSampleRate
+      ? channelData
+      : resampleFloat32(channelData, effectiveSampleRate, targetSampleRate);
+
+  const audioBuffer = context.createBuffer(1, resampled.length, targetSampleRate);
+  audioBuffer.copyToChannel(resampled, 0);
+  return audioBuffer;
+};
+
 const extractSampleRate = (mimeType?: string, fallback?: number) => {
   if (typeof fallback === "number" && Number.isFinite(fallback) && fallback > 0) {
     return fallback;
@@ -168,11 +354,15 @@ export default function App() {
   const [lights, setLights] = useState<LightState[]>([]);
   const [musicLibrary, setMusicLibrary] = useState<string[]>([]);
   const [currentSong, setCurrentSong] = useState<{ title: string; url: string } | null>(null);
+  const [isMusicPaused, setIsMusicPaused] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [lightLocation, setLightLocation] = useState<string>("");
   const [musicTitle, setMusicTitle] = useState<string>("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState<string>("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
   const [geminiStatus, setGeminiStatus] = useState<string>("Đang kết nối tới Gemini...");
   const [isGeminiConnected, setIsGeminiConnected] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -187,6 +377,7 @@ export default function App() {
   const playbackQueueRef = useRef<Promise<void>>(Promise.resolve());
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const currentAssistantMessageIdRef = useRef<string | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
@@ -194,11 +385,41 @@ export default function App() {
   const recordingSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const recordingGainNodeRef = useRef<GainNode | null>(null);
   const pendingInputSamplesRef = useRef<Float32Array | null>(null);
-  const recordingWorkletLoadedRef = useRef<boolean>(false);
+  const recordingWorkletContextRef = useRef<AudioContext | null>(null);
+  const autoplayUnlockCleanupRef = useRef<(() => void) | null>(null);
 
   const showFeedback = useCallback((message: string, isError = false) => {
     setFeedback({ message, isError });
   }, []);
+
+  const clearSelectedImage = useCallback(() => {
+    setSelectedImage(null);
+    setSelectedImagePreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return null;
+    });
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  }, [imageInputRef]);
+
+  const clearPendingAutoplayUnlock = useCallback(() => {
+    const cleanup = autoplayUnlockCleanupRef.current;
+    if (cleanup) {
+      cleanup();
+      autoplayUnlockCleanupRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (selectedImagePreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(selectedImagePreview);
+      }
+    };
+  }, [selectedImagePreview]);
 
   const applyLightSnapshot = useCallback((snapshot: LightState[]) => {
     const validLights = snapshot
@@ -250,6 +471,40 @@ export default function App() {
     refreshMusicLibrary();
   }, [refreshLights, refreshMusicLibrary]);
 
+  const handleImageSelect = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        clearSelectedImage();
+        return;
+      }
+
+      if (!file.type || !file.type.startsWith("image/")) {
+        showFeedback("Chỉ hỗ trợ gửi tệp hình ảnh.", true);
+        clearSelectedImage();
+        return;
+      }
+
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        showFeedback(
+          `Ảnh vượt quá giới hạn ${formatFileSize(MAX_IMAGE_SIZE_BYTES)}. Vui lòng chọn ảnh khác.`,
+          true
+        );
+        clearSelectedImage();
+        return;
+      }
+
+      setSelectedImage(file);
+      setSelectedImagePreview((previous) => {
+        if (previous?.startsWith("blob:")) {
+          URL.revokeObjectURL(previous);
+        }
+        return URL.createObjectURL(file);
+      });
+    },
+    [clearSelectedImage, showFeedback]
+  );
+
   const ensureAudioContext = useCallback(() => {
     if (typeof window === "undefined") {
       return null;
@@ -295,29 +550,20 @@ export default function App() {
           typeof payloadObject.sample_rate === "number" ? payloadObject.sample_rate : undefined
         ) || OUTPUT_SAMPLE_RATE;
 
-        const binaryString = atob(base64);
-        const buffer = new ArrayBuffer(binaryString.length);
-        const bytes = new Uint8Array(buffer);
-        for (let index = 0; index < binaryString.length; index += 1) {
-          bytes[index] = binaryString.charCodeAt(index);
+        const arrayBuffer = base64ToArrayBuffer(base64);
+        if (!arrayBuffer) {
+          return;
         }
 
-        const dataView = new DataView(buffer);
-        const sampleCount = Math.floor(binaryString.length / 2);
-        const floatData = new Float32Array(sampleCount);
-        for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
-          const sample = dataView.getInt16(sampleIndex * 2, true);
-          floatData[sampleIndex] = sample / 32768;
+        const audioBuffer = await decodeAudioChunk(
+          arrayBuffer,
+          context,
+          parsedSampleRate,
+          typeof payloadObject.mime_type === "string" ? payloadObject.mime_type : undefined
+        );
+        if (!audioBuffer) {
+          return;
         }
-
-        const targetSampleRate = context.sampleRate;
-        const processedData =
-          targetSampleRate === parsedSampleRate
-            ? floatData
-            : resampleFloat32(floatData, parsedSampleRate, targetSampleRate);
-
-        const audioBuffer = context.createBuffer(1, processedData.length, targetSampleRate);
-        audioBuffer.copyToChannel(processedData, 0);
 
         const source = context.createBufferSource();
         source.buffer = audioBuffer;
@@ -342,18 +588,183 @@ export default function App() {
     [processAssistantAudio]
   );
 
+  const beginMusicPlayback = useCallback(
+    async (title: string, streamUrl: string): Promise<boolean> => {
+      const absoluteUrl =
+        typeof window !== "undefined"
+          ? new URL(streamUrl, window.location.origin).toString()
+          : streamUrl;
+      let playbackStarted = false;
+      const audioElement = audioPlayerRef.current;
+      if (audioElement) {
+        clearPendingAutoplayUnlock();
+        try {
+          audioElement.pause();
+        } catch {
+          // ignore pause errors
+        }
+        audioElement.autoplay = true;
+        audioElement.playsInline = true;
+        audioElement.preload = "auto";
+        audioElement.src = absoluteUrl;
+
+        const attemptPlayback = async (): Promise<boolean> => {
+          try {
+            audioElement.muted = false;
+            await audioElement.play();
+            return true;
+          } catch (error) {
+            if (error instanceof DOMException && error.name === "NotAllowedError") {
+              const unmuteOnPlay = () => {
+                audioElement.muted = false;
+                audioElement.removeEventListener("playing", unmuteOnPlay);
+              };
+              try {
+                audioElement.muted = true;
+                audioElement.addEventListener("playing", unmuteOnPlay, { once: true });
+                await audioElement.play();
+                return true;
+              } catch {
+                audioElement.removeEventListener("playing", unmuteOnPlay);
+                audioElement.muted = false;
+                audioElement.pause();
+              }
+            }
+            console.error("Không thể phát nhạc tự động", error);
+            return false;
+          }
+        };
+
+        const scheduleUnlock = () => {
+          const resumePlayback = async () => {
+            clearPendingAutoplayUnlock();
+            try {
+              audioElement.muted = false;
+              await audioElement.play();
+              showFeedback(`Đang phát bài: ${title}`);
+            } catch (resumeError) {
+              console.error("Không thể phát nhạc sau khi người dùng tương tác", resumeError);
+              showFeedback("Không thể phát nhạc trên trình duyệt", true);
+            }
+          };
+          const cleanup = () => {
+            document.removeEventListener("click", resumePlayback);
+            document.removeEventListener("keydown", resumePlayback);
+          };
+          document.addEventListener("click", resumePlayback, { once: true });
+          document.addEventListener("keydown", resumePlayback, { once: true });
+          autoplayUnlockCleanupRef.current = () => {
+            cleanup();
+            autoplayUnlockCleanupRef.current = null;
+          };
+        };
+
+        playbackStarted = await attemptPlayback();
+        if (!playbackStarted) {
+          scheduleUnlock();
+        }
+      }
+      setCurrentSong({ title, url: absoluteUrl });
+      setIsMusicPaused(false);
+      return playbackStarted;
+    },
+    [clearPendingAutoplayUnlock, setCurrentSong, setIsMusicPaused, showFeedback]
+  );
+
+  const pauseCurrentMusic = useCallback((): boolean => {
+    const audioElement = audioPlayerRef.current;
+    if (!audioElement) {
+      return false;
+    }
+    try {
+      audioElement.pause();
+      setIsMusicPaused(true);
+      return true;
+    } catch (error) {
+      console.error("Không thể tạm dừng nhạc trên trình duyệt", error);
+      return false;
+    }
+  }, [setIsMusicPaused]);
+
+  const resumeCurrentMusic = useCallback(async (): Promise<boolean> => {
+    const audioElement = audioPlayerRef.current;
+    if (!audioElement) {
+      return false;
+    }
+    try {
+      await audioElement.play();
+      setIsMusicPaused(false);
+      return true;
+    } catch (error) {
+      console.error("Không thể tiếp tục phát nhạc trên trình duyệt", error);
+      return false;
+    }
+  }, [setIsMusicPaused]);
+
   const appendChatMessage = useCallback((message: Omit<ChatMessage, "id" | "timestamp"> & { id?: string }) => {
     setChatMessages((previous) => [
       ...previous,
       {
         id: message.id ?? createMessageId(),
         role: message.role,
-        content: message.content,
+        content: message.content ?? "",
         streaming: message.streaming,
+        imageDataUrl: message.imageDataUrl,
         timestamp: Date.now()
       }
     ]);
   }, []);
+
+  const sendSelectedImage = useCallback(async () => {
+    if (isUploadingImage) {
+      return;
+    }
+
+    const file = selectedImage;
+    if (!file) {
+      showFeedback("Vui lòng chọn một ảnh trước khi gửi.", true);
+      return;
+    }
+
+    const socket = geminiSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      showFeedback("Kết nối với Gemini chưa sẵn sàng", true);
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const base64 = arrayBufferToBase64(buffer);
+      const mimeType = file.type || "image/png";
+      socket.send(
+        JSON.stringify({
+          realtime_input: {
+            media_chunks: [
+              {
+                mime_type: mimeType,
+                data: base64
+              }
+            ]
+          }
+        })
+      );
+
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+      appendChatMessage({
+        role: "user",
+        content: file.name ? `Đã gửi ảnh ${file.name}` : "Đã gửi một ảnh",
+        imageDataUrl: dataUrl
+      });
+      showFeedback("Đã gửi ảnh tới Gemini");
+      clearSelectedImage();
+    } catch (error) {
+      console.error("Không thể gửi ảnh tới Gemini", error);
+      showFeedback("Không thể gửi ảnh. Vui lòng thử lại.", true);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }, [appendChatMessage, clearSelectedImage, isUploadingImage, selectedImage, showFeedback]);
 
   const updateAssistantMessage = useCallback(
     (text: string, finished: boolean) => {
@@ -480,12 +891,81 @@ export default function App() {
           case "smart_home_music": {
             const matched = typeof data.matched_song === "string" ? data.matched_song : null;
             const requested = typeof data.requested_title === "string" ? data.requested_title : "bài hát";
+            const streamUrl = typeof data.stream_url === "string" ? data.stream_url : null;
             appendChatMessage({
               role: "system",
               content: matched
                 ? `Đang phát bài hát “${matched}” theo yêu cầu “${requested}”.`
                 : `Không tìm thấy bài hát phù hợp với yêu cầu “${requested}”.`
             });
+            if (matched && streamUrl) {
+              void beginMusicPlayback(matched, streamUrl).then((started) => {
+                if (started) {
+                  showFeedback(`Đang phát bài: ${matched}`);
+                } else {
+                  showFeedback(
+                    "Trình duyệt đang chặn phát nhạc tự động. Nhấp vào màn hình để bắt đầu phát.",
+                    true
+                  );
+                }
+              });
+            } else if (matched && !streamUrl) {
+              showFeedback(
+                `Không thể chuẩn bị luồng phát cho bài hát “${matched}”. Vui lòng thử lại.`,
+                true
+              );
+            } else if (!matched) {
+              showFeedback(`Không tìm thấy bài hát phù hợp với yêu cầu “${requested}”.`, true);
+            }
+            return;
+          }
+          case "smart_home_music_control": {
+            const action = typeof data.action === "string" ? data.action : "";
+            const status = typeof data.status === "string" ? data.status : "";
+            const matched = typeof data.matched_song === "string" ? data.matched_song : null;
+            if (action === "pause") {
+              if (status === "paused") {
+                appendChatMessage({
+                  role: "system",
+                  content: matched ? `Đã tạm dừng bài hát “${matched}”.` : "Đã tạm dừng phát nhạc."
+                });
+                const paused = pauseCurrentMusic();
+                if (paused) {
+                  showFeedback(matched ? `Đã tạm dừng bài: ${matched}` : "Đã tạm dừng nhạc");
+                } else {
+                  showFeedback("Không thể tạm dừng nhạc trên trình duyệt.", true);
+                }
+              } else if (status === "no_active_song") {
+                appendChatMessage({
+                  role: "system",
+                  content: "Không có bài hát nào đang phát để tạm dừng."
+                });
+                showFeedback("Không có bài hát nào đang phát.", true);
+              }
+              return;
+            }
+            if (action === "continue") {
+              if (status === "playing") {
+                appendChatMessage({
+                  role: "system",
+                  content: matched ? `Tiếp tục phát bài hát “${matched}”.` : "Tiếp tục phát nhạc."
+                });
+                void resumeCurrentMusic().then((resumed) => {
+                  if (resumed) {
+                    showFeedback(matched ? `Tiếp tục phát bài: ${matched}` : "Tiếp tục phát nhạc");
+                  } else {
+                    showFeedback("Không thể tiếp tục phát nhạc trên trình duyệt.", true);
+                  }
+                });
+              } else if (status === "no_paused_song") {
+                appendChatMessage({
+                  role: "system",
+                  content: "Không có bài hát nào đang tạm dừng để tiếp tục."
+                });
+                showFeedback("Không có bài hát nào đang tạm dừng.", true);
+              }
+              return;
+            }
             return;
           }
           default:
@@ -523,7 +1003,16 @@ export default function App() {
         return;
       }
     },
-    [appendChatMessage, applyLightUpdate, playAssistantAudio, updateAssistantMessage]
+    [
+      appendChatMessage,
+      applyLightUpdate,
+      beginMusicPlayback,
+      pauseCurrentMusic,
+      playAssistantAudio,
+      resumeCurrentMusic,
+      showFeedback,
+      updateAssistantMessage
+    ]
   );
 
   useEffect(() => {
@@ -703,23 +1192,15 @@ export default function App() {
           method: "POST",
           body: JSON.stringify({ title })
         });
-        const absoluteUrl = new URL(response.stream_url, window.location.origin).toString();
-        const audioElement = audioPlayerRef.current;
-        if (audioElement) {
-          try {
-            audioElement.pause();
-          } catch (error) {
-            // ignore pause errors
-          }
-          audioElement.src = absoluteUrl;
-          audioElement.load();
-          void audioElement.play().catch((playError) => {
-            console.error("Không thể phát nhạc trên trình duyệt", playError);
-            showFeedback("Không thể phát nhạc trên trình duyệt", true);
-          });
+        const playbackStarted = await beginMusicPlayback(response.selected_song, response.stream_url);
+        if (playbackStarted) {
+          showFeedback(`Đang phát bài: ${response.selected_song}`);
+        } else {
+          showFeedback(
+            "Trình duyệt đang chặn phát nhạc tự động. Nhấp vào màn hình để bắt đầu phát.",
+            true
+          );
         }
-        setCurrentSong({ title: response.selected_song, url: absoluteUrl });
-        showFeedback(`Đang phát bài: ${response.selected_song}`);
         setMusicTitle("");
       } catch (error) {
         if (error instanceof Error) {
@@ -727,7 +1208,7 @@ export default function App() {
         }
       }
     },
-    [musicTitle, showFeedback]
+    [beginMusicPlayback, musicTitle, showFeedback]
   );
 
   const hasLights = lights.length > 0;
@@ -801,6 +1282,9 @@ export default function App() {
     if (context) {
       context.close().catch(() => undefined);
       recordingAudioContextRef.current = null;
+      if (recordingWorkletContextRef.current === context) {
+        recordingWorkletContextRef.current = null;
+      }
     }
 
     pendingInputSamplesRef.current = null;
@@ -885,12 +1369,12 @@ export default function App() {
         return;
       }
 
-      if (!recordingWorkletLoadedRef.current) {
+      if (recordingWorkletContextRef.current !== recordingContext) {
         try {
           await recordingContext.audioWorklet.addModule(
             new URL("./worklets/pcm-worklet-processor.js", import.meta.url)
           );
-          recordingWorkletLoadedRef.current = true;
+          recordingWorkletContextRef.current = recordingContext;
         } catch (error) {
           console.error("Không thể tải audio worklet", error);
           setRecordingError("Không thể khởi động micro. Vui lòng thử lại.");
@@ -978,7 +1462,8 @@ export default function App() {
 
   useEffect(() => () => {
     stopRecording();
-  }, [stopRecording]);
+    clearPendingAutoplayUnlock();
+  }, [clearPendingAutoplayUnlock, stopRecording]);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -1083,13 +1568,20 @@ export default function App() {
               <div className="space-y-3">
                 <div className="rounded-lg border bg-background p-4">
                   <p className="text-sm font-semibold">
-                    {currentSong ? `Đang phát: ${currentSong.title}` : "Chưa phát bài hát nào"}
+                    {currentSong
+                      ? `${isMusicPaused ? "Đang tạm dừng" : "Đang phát"}: ${currentSong.title}`
+                      : "Chưa phát bài hát nào"}
                   </p>
                   <audio
                     ref={audioPlayerRef}
                     className="mt-3 w-full"
+                    autoPlay
+                    playsInline
+                    preload="auto"
                     controls
                     src={currentSong?.url}
+                    onPause={() => setIsMusicPaused(true)}
+                    onPlay={() => setIsMusicPaused(false)}
                   >
                     Trình duyệt của bạn không hỗ trợ phát nhạc.
                   </audio>
@@ -1167,6 +1659,52 @@ export default function App() {
                 <p className="text-xs text-destructive">{recordingError}</p>
               ) : null}
             </div>
+            <div className="rounded-lg border bg-background px-4 py-3 text-sm">
+              <div className="flex flex-col gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="gemini-image-upload">Gửi ảnh tới Gemini</Label>
+                  <Input
+                    id="gemini-image-upload"
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    disabled={!isGeminiConnected || isUploadingImage}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Hỗ trợ ảnh tối đa {formatFileSize(MAX_IMAGE_SIZE_BYTES)}.
+                  </p>
+                </div>
+                {selectedImagePreview ? (
+                  <div className="flex flex-col gap-2">
+                    <img
+                      src={selectedImagePreview}
+                      alt="Ảnh đã chọn để gửi tới Gemini"
+                      className="max-h-48 rounded-md border object-contain"
+                    />
+                    {selectedImage ? (
+                      <span className="text-xs text-muted-foreground">
+                        {selectedImage.name} · {formatFileSize(selectedImage.size)}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="flex justify-end gap-2">
+                  {selectedImage ? (
+                    <Button type="button" variant="ghost" onClick={clearSelectedImage} disabled={isUploadingImage}>
+                      Bỏ chọn
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    onClick={() => void sendSelectedImage()}
+                    disabled={!selectedImage || !isGeminiConnected || isUploadingImage}
+                  >
+                    {isUploadingImage ? "Đang gửi..." : "Gửi ảnh"}
+                  </Button>
+                </div>
+              </div>
+            </div>
             <div className="flex-1 overflow-hidden rounded-lg border bg-background">
               <div ref={chatContainerRef} className="h-80 space-y-4 overflow-y-auto p-4 text-sm">
                 {chatMessages.length ? (
@@ -1188,7 +1726,18 @@ export default function App() {
                               : "bg-amber-50 text-amber-900"
                         )}
                       >
-                        <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                        <div className="flex flex-col gap-2">
+                          {message.content ? (
+                            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                          ) : null}
+                          {message.imageDataUrl ? (
+                            <img
+                              src={message.imageDataUrl}
+                              alt={message.role === "user" ? "Ảnh bạn đã gửi" : "Ảnh từ Gemini"}
+                              className="max-h-64 rounded-md border object-contain"
+                            />
+                          ) : null}
+                        </div>
                       </div>
                       {message.streaming ? (
                         <span className="text-xs text-muted-foreground">Gemini đang trả lời...</span>

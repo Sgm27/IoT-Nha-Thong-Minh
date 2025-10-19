@@ -8,7 +8,7 @@ import datetime
 import logging
 import os
 import json as json_lib
-from typing import Optional, Dict
+from typing import Any, Optional, Dict
 
 from fastapi import WebSocket, WebSocketDisconnect
 from google import genai
@@ -526,16 +526,13 @@ class GeminiService:
                         continue
                 
                     if "realtime_input" in data:
-                        for chunk in data["realtime_input"]["media_chunks"]:
-                            if chunk["mime_type"] == "audio/pcm":
-                                await session.send_realtime_input(
-                                    audio=types.Blob(data=chunk["data"], mime_type="audio/pcm;rate=16000")
-                                )
-                                
-                            elif chunk["mime_type"].startswith("image/"):
-                                await session.send_realtime_input(
-                                    media=types.Blob(data=chunk["data"], mime_type=chunk["mime_type"])
-                                )
+                        realtime_input = data["realtime_input"]
+                        if isinstance(realtime_input, dict):
+                            media_chunks = realtime_input.get("media_chunks", [])
+                            if isinstance(media_chunks, list):
+                                for chunk in media_chunks:
+                                    if isinstance(chunk, dict):
+                                        await self._process_realtime_media_chunk(session, chunk)
 
                     elif "text" in data:
                         text_content = data["text"]
@@ -573,7 +570,38 @@ class GeminiService:
             logger.error(f"Error in send_to_gemini: {e}")
         finally:
             logger.info("send_to_gemini closed")
-    
+
+    async def _process_realtime_media_chunk(self, session, chunk: Dict[str, Any]) -> None:
+        """Decode a realtime media chunk and forward it to the Gemini session."""
+
+        mime = chunk.get("mime_type")
+        payload = chunk.get("data")
+
+        if not isinstance(mime, str) or not payload:
+            return
+
+        payload_bytes: Optional[bytes]
+        if isinstance(payload, str):
+            try:
+                payload_bytes = base64.b64decode(payload)
+            except (ValueError, binascii.Error):
+                logger.warning("Không thể giải mã dữ liệu realtime_input")
+                return
+        elif isinstance(payload, (bytes, bytearray)):
+            payload_bytes = bytes(payload)
+        else:
+            return
+
+        blob = types.Blob(data=payload_bytes, mime_type=mime)
+        audio_blob = blob if mime.startswith("audio/") else None
+        media_blob = blob if mime.startswith("image/") else None
+
+        if not audio_blob and not media_blob:
+            logger.debug("Bỏ qua realtime_input với mime type không hỗ trợ: %s", mime)
+            return
+
+        await session.send_realtime_input(audio=audio_blob, media=media_blob)
+
     async def _receive_from_gemini(self, websocket: WebSocket, session):
         """Handle receiving messages from Gemini and sending to WebSocket with improved error handling.
         

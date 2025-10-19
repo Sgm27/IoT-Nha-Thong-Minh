@@ -9,7 +9,8 @@ import datetime as dt
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
+from urllib.parse import urlencode
 
 from fastapi import WebSocket, WebSocketDisconnect
 from google import genai
@@ -34,11 +35,15 @@ class GeminiService:
     - turn_on_light: bật đèn ở một vị trí bất kỳ
     - turn_off_light: tắt đèn ở một vị trí bất kỳ
     - play_music: phát bài hát gần giống nhất với tên được yêu cầu
+    - pause_music: tạm dừng bài hát đang phát
+    - continue_music: tiếp tục phát bài hát đã tạm dừng
 
     Quy tắc sử dụng tool:
     1. Nếu người dùng nhắc đến bật đèn, chiếu sáng, sáng đèn,... hãy gọi tool turn_on_light.
     2. Nếu người dùng nhắc đến tắt đèn, dập đèn,... hãy gọi tool turn_off_light.
     3. Nếu người dùng muốn nghe nhạc, hãy gọi tool play_music và truyền tên bài hát họ nêu ra.
+    4. Nếu người dùng yêu cầu tạm dừng nhạc, hãy gọi tool pause_music.
+    5. Nếu người dùng yêu cầu bật lại nhạc đã tạm dừng, hãy gọi tool continue_music.
 
     Khi xử lý hình ảnh, mô tả chi tiết nội dung ảnh và liên hệ với ngữ cảnh căn nhà.
     Khi trả lời, hãy chia nhỏ nội dung thành các mục rõ ràng, dễ hiểu.
@@ -72,6 +77,8 @@ class GeminiService:
         self._current_assistant_output = ""
         self._send_locks: Dict[WebSocket, asyncio.Lock] = {}
         self._default_output_sample_rate = 24000
+        self._latest_session_handle: Optional[str] = None
+        self._latest_token_usage: Optional[Dict[str, int]] = None
 
     # ------------------------------------------------------------------
     # WebSocket orchestration
@@ -80,6 +87,10 @@ class GeminiService:
         """Main entry point for the Gemini WebSocket connection."""
 
         previous_session_handle = self.session_service.load_previous_session_handle()
+        self._latest_session_handle = previous_session_handle
+        self._latest_token_usage = self._sanitize_token_usage(
+            self.session_service.get_last_token_usage()
+        )
         await self._send_safely(websocket, {"setupComplete": {}})
 
         if not self.client:
@@ -155,32 +166,13 @@ class GeminiService:
                     continue
 
                 if "realtime_input" in data:
-                    for chunk in data["realtime_input"].get("media_chunks", []):
-                        mime = chunk.get("mime_type", "")
-                        payload = chunk.get("data")
-                        if not payload:
-                            continue
-
-                        payload_bytes: Optional[bytes]
-                        if isinstance(payload, str):
-                            try:
-                                payload_bytes = base64.b64decode(payload)
-                            except (ValueError, binascii.Error):
-                                logger.warning("Không thể giải mã dữ liệu realtime_input")
-                                payload_bytes = None
-                        elif isinstance(payload, (bytes, bytearray)):
-                            payload_bytes = bytes(payload)
-                        else:
-                            payload_bytes = None
-
-                        if not payload_bytes:
-                            continue
-
-                        blob = types.Blob(data=payload_bytes, mime_type=mime)
-                        await session.send_realtime_input(
-                            audio=blob if mime.startswith("audio/") else None,
-                            media=blob if mime.startswith("image/") else None,
-                        )
+                    realtime_input = data["realtime_input"]
+                    if isinstance(realtime_input, dict):
+                        media_chunks = realtime_input.get("media_chunks", [])
+                        if isinstance(media_chunks, list):
+                            for chunk in media_chunks:
+                                if isinstance(chunk, dict):
+                                    await self._process_realtime_media_chunk(session, chunk)
                     continue
 
                 if "text" in data:
@@ -206,6 +198,65 @@ class GeminiService:
         finally:
             logger.info("Client -> Gemini relay stopped")
 
+    def _persist_session_handle(
+        self,
+        handle: Optional[str],
+        *,
+        token_usage: Optional[Dict[str, int]] = None,
+        force: bool = False,
+    ) -> None:
+        """Persist the resumable session handle when available."""
+        if not handle:
+            return
+
+        if not force and handle == self._latest_session_handle:
+            return
+
+        self._latest_session_handle = handle
+        if token_usage is not None:
+            self._latest_token_usage = self._sanitize_token_usage(token_usage)
+
+        try:
+            self.session_service.save_previous_session_handle(
+                handle, token_usage=self._latest_token_usage
+            )
+            logger.info("💾 Đã lưu session handle để phục hồi lần sau")
+        except Exception as exc:
+            logger.exception("❌ Không thể lưu session handle: %s", exc)
+
+    @staticmethod
+    def _sanitize_token_usage(
+        usage: Optional[Dict[str, object]]
+    ) -> Optional[Dict[str, int]]:
+        if not usage:
+            return None
+        sanitized: Dict[str, int] = {}
+        for key, value in usage.items():
+            if isinstance(value, (int, float)):
+                sanitized[key] = int(value)
+        return sanitized or None
+
+    @staticmethod
+    def _extract_token_usage(metadata) -> Optional[Dict[str, int]]:
+        if metadata is None:
+            return None
+        raw_usage: Dict[str, object]
+        try:
+            raw_usage = metadata.model_dump(exclude_none=True)  # type: ignore[attr-defined]
+        except AttributeError:
+            raw_usage = {}
+            for attr in (
+                "total_token_count",
+                "input_token_count",
+                "output_token_count",
+                "input_token_count_total",
+                "output_token_count_total",
+            ):
+                value = getattr(metadata, attr, None)
+                if value is not None:
+                    raw_usage[attr] = value
+        return GeminiService._sanitize_token_usage(raw_usage)
+
     async def _relay_gemini_to_client(self, websocket: WebSocket, session) -> None:
         try:
             while True:
@@ -219,6 +270,17 @@ class GeminiService:
                         if hasattr(response, "tool_call") and response.tool_call:
                             await self._handle_tool_calls(websocket, session, response.tool_call)
                             continue
+
+                        if getattr(response, "usage_metadata", None):
+                            usage_snapshot = self._extract_token_usage(response.usage_metadata)
+                            if usage_snapshot:
+                                self._latest_token_usage = usage_snapshot
+                                logger.info(
+                                    "🔢 Token usage - total: %s | input: %s | output: %s",
+                                    usage_snapshot.get("total_token_count"),
+                                    usage_snapshot.get("input_token_count"),
+                                    usage_snapshot.get("output_token_count"),
+                                )
 
                         if response.server_content and response.server_content.output_transcription:
                             transcription = response.server_content.output_transcription
@@ -280,13 +342,22 @@ class GeminiService:
 
                         if response.session_resumption_update:
                             update = response.session_resumption_update
-                            if update.resumable and update.new_handle:
-                                self.session_service.save_previous_session_handle(update.new_handle)
+                            self._persist_session_handle(
+                                getattr(update, "new_handle", None),
+                                token_usage=self._latest_token_usage,
+                            )
 
                         if response.server_content and response.server_content.turn_complete:
                             logger.info("\n<Turn complete>")
                             logger.info("=" * 50)
                             logger.info("🎯 Turn hoàn thành, sẵn sàng nhận input tiếp theo")
+
+                            # Ensure latest resumable session state is flushed to disk
+                            self._persist_session_handle(
+                                self._latest_session_handle,
+                                token_usage=self._latest_token_usage,
+                                force=True,
+                            )
                             
                             # Send turn complete signal to client
                             await self._send_safely(
@@ -360,6 +431,37 @@ class GeminiService:
         except WebSocketDisconnect:
             logger.info("Ping loop stopped (disconnect)")
 
+    async def _process_realtime_media_chunk(self, session, chunk: Dict[str, Any]) -> None:
+        """Decode realtime media payloads from the client and forward them to Gemini."""
+
+        mime = chunk.get("mime_type")
+        payload = chunk.get("data")
+
+        if not isinstance(mime, str) or not payload:
+            return
+
+        payload_bytes: Optional[bytes]
+        if isinstance(payload, str):
+            try:
+                payload_bytes = base64.b64decode(payload)
+            except (ValueError, binascii.Error):
+                logger.warning("Không thể giải mã dữ liệu realtime_input")
+                return
+        elif isinstance(payload, (bytes, bytearray)):
+            payload_bytes = bytes(payload)
+        else:
+            return
+
+        blob = types.Blob(data=payload_bytes, mime_type=mime)
+        audio_blob = blob if mime.startswith("audio/") else None
+        media_blob = blob if mime.startswith("image/") else None
+
+        if not audio_blob and not media_blob:
+            logger.debug("Bỏ qua realtime_input với mime type không hỗ trợ: %s", mime)
+            return
+
+        await session.send_realtime_input(audio=audio_blob, media=media_blob)
+
     # ------------------------------------------------------------------
     # Tool handling
     # ------------------------------------------------------------------
@@ -421,11 +523,17 @@ class GeminiService:
             elif name == "play_music":
                 title = args.get("title", "")
                 matched = self.smart_home_service.play_music(title)
+                stream_url = None
+                if matched:
+                    file_path = self.smart_home_service.get_song_file(matched)
+                    if file_path:
+                        stream_url = f"/smart-home/music/stream?{urlencode({'title': matched})}"
                 if matched:
                     payload = {
                         "result": "success",
                         "requested_title": title,
                         "matched_song": matched,
+                        "stream_url": stream_url,
                     }
                     await self._send_safely(
                         websocket,
@@ -433,12 +541,14 @@ class GeminiService:
                             "type": "smart_home_music",
                             "requested_title": title,
                             "matched_song": matched,
+                            "stream_url": stream_url,
                         },
                     )
                 else:
                     payload = {
                         "result": "not_found",
                         "requested_title": title,
+                        "stream_url": None,
                     }
                     await self._send_safely(
                         websocket,
@@ -446,6 +556,91 @@ class GeminiService:
                             "type": "smart_home_music",
                             "requested_title": title,
                             "matched_song": None,
+                            "stream_url": None,
+                        },
+                    )
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response=payload,
+                    )
+                )
+            elif name == "pause_music":
+                paused_song = self.smart_home_service.pause_music()
+                state = self.smart_home_service.get_music_playback_state()
+                if paused_song:
+                    payload = {
+                        "result": "success",
+                        "requested_title": state.requested_title,
+                        "matched_song": state.matched_song,
+                        "status": state.status,
+                    }
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "type": "smart_home_music_control",
+                            "action": "pause",
+                            "status": "paused",
+                            "requested_title": state.requested_title,
+                            "matched_song": state.matched_song,
+                        },
+                    )
+                else:
+                    payload = {
+                        "result": "no_active_song",
+                        "requested_title": state.requested_title,
+                        "matched_song": state.matched_song,
+                        "status": state.status,
+                    }
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "type": "smart_home_music_control",
+                            "action": "pause",
+                            "status": "no_active_song",
+                        },
+                    )
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response=payload,
+                    )
+                )
+            elif name == "continue_music":
+                resumed_song = self.smart_home_service.continue_music()
+                state = self.smart_home_service.get_music_playback_state()
+                if resumed_song:
+                    payload = {
+                        "result": "success",
+                        "requested_title": state.requested_title,
+                        "matched_song": state.matched_song,
+                        "status": state.status,
+                    }
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "type": "smart_home_music_control",
+                            "action": "continue",
+                            "status": "playing",
+                            "requested_title": state.requested_title,
+                            "matched_song": state.matched_song,
+                        },
+                    )
+                else:
+                    payload = {
+                        "result": "no_paused_song",
+                        "requested_title": state.requested_title,
+                        "matched_song": state.matched_song,
+                        "status": state.status,
+                    }
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "type": "smart_home_music_control",
+                            "action": "continue",
+                            "status": "no_paused_song",
                         },
                     )
                 responses.append(
@@ -471,9 +666,9 @@ class GeminiService:
     # Helpers
     # ------------------------------------------------------------------
     def _create_live_config(self, previous_session_handle: Optional[str]) -> types.LiveConnectConfig:
-        session_resumption_cfg = None
-        if previous_session_handle:
-            session_resumption_cfg = types.SessionResumptionConfig(handle=previous_session_handle)
+        session_resumption_cfg = types.SessionResumptionConfig(
+            handle=previous_session_handle
+        )
 
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -526,6 +721,24 @@ class GeminiService:
                                     }
                                 },
                                 "required": ["title"],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="pause_music",
+                            description="Tạm dừng bài hát đang phát nếu có",
+                            parameters={
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="continue_music",
+                            description="Tiếp tục phát bài hát đã tạm dừng nếu có",
+                            parameters={
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
                             },
                         ),
                     ],

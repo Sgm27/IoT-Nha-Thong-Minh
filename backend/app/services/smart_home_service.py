@@ -5,7 +5,7 @@ import threading
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Literal
 
 from app.core.config import settings
 
@@ -214,6 +214,20 @@ class MusicService:
         return None
 
 
+@dataclass
+class MusicPlaybackState:
+    requested_title: Optional[str] = None
+    matched_song: Optional[str] = None
+    status: Literal["stopped", "playing", "paused"] = "stopped"
+
+    def copy(self) -> "MusicPlaybackState":
+        return MusicPlaybackState(
+            requested_title=self.requested_title,
+            matched_song=self.matched_song,
+            status=self.status,
+        )
+
+
 class SmartHomeService:
     def __init__(
         self,
@@ -222,6 +236,7 @@ class SmartHomeService:
     ) -> None:
         self.lighting_service = lighting_service or LightingService()
         self.music_service = music_service or MusicService()
+        self._music_playback_state = MusicPlaybackState()
 
     def turn_on_light(self, location: str) -> LightState:
         return self.lighting_service.toggle_light(location, True)
@@ -230,7 +245,20 @@ class SmartHomeService:
         return self.lighting_service.toggle_light(location, False)
 
     def play_music(self, title: str) -> Optional[str]:
-        return self.music_service.choose_song(title)
+        matched = self.music_service.choose_song(title)
+        if matched:
+            self._music_playback_state = MusicPlaybackState(
+                requested_title=title,
+                matched_song=matched,
+                status="playing",
+            )
+        else:
+            self._music_playback_state = MusicPlaybackState(
+                requested_title=title,
+                matched_song=None,
+                status="stopped",
+            )
+        return matched
 
     def get_song_file(self, title: str) -> Optional[Path]:
         return self.music_service.find_song_file(title)
@@ -240,6 +268,21 @@ class SmartHomeService:
 
     def list_music(self) -> List[str]:
         return self.music_service.list_available_songs()
+
+    def get_music_playback_state(self) -> MusicPlaybackState:
+        return self._music_playback_state.copy()
+
+    def pause_music(self) -> Optional[str]:
+        if self._music_playback_state.matched_song and self._music_playback_state.status == "playing":
+            self._music_playback_state.status = "paused"
+            return self._music_playback_state.matched_song
+        return None
+
+    def continue_music(self) -> Optional[str]:
+        if self._music_playback_state.matched_song and self._music_playback_state.status == "paused":
+            self._music_playback_state.status = "playing"
+            return self._music_playback_state.matched_song
+        return None
 
 
 _global_smart_home_service: Optional[SmartHomeService] = None
