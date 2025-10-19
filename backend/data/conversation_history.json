@@ -958,5 +958,380 @@
     "role": "assistant",
     "text": "Chào bạn, tôi có thể giúp gì cho bạn ạ?",
     "timestamp": "2025-10-19T02:42:49.934197"
+  },
+  {
+    "role": "user",
+    "text": "Bật cho tôi bài hát phép mời.",
+    "timestamp": "2025-10-19T02:51:38.224812"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát Phép Màu. Chúc bạn nghe nhạc vui vẻ.",
+    "timestamp": "2025-10-19T02:51:38.225664"
+  },
+  {
+    "role": "user",
+    "text": "<noise>",
+    "timestamp": "2025-10-19T02:51:46.037626"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn bật bài hát nào ạ?",
+    "timestamp": "2025-10-19T02:51:46.038378"
+  },
+  {
+    "role": "user",
+    "text": "Dựng phát bài hát hiện tại.",
+    "timestamp": "2025-10-19T02:51:50.747060"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tạm dừng bài hát Phép Màu.",
+    "timestamp": "2025-10-19T02:51:50.747980"
+  },
+  {
+    "role": "user",
+    "text": "bật cho tôi đèn nhạt tắt đi.",
+    "timestamp": "2025-10-19T02:53:32.779870"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn bật đèn ở đâu ạ?",
+    "timestamp": "2025-10-19T02:53:32.780734"
+  },
+  {
+    "role": "user",
+    "text": "Bật điện ở nhà tâm.",
+    "timestamp": "2025-10-19T02:53:38.237141"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật đèn nhà tắm.",
+    "timestamp": "2025-10-19T02:53:38.237866"
+  },
+  {
+    "role": "user",
+    "text": "Okay.",
+    "timestamp": "2025-10-19T02:53:42.947192"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn còn cần tôi giúp gì nữa không?",
+    "timestamp": "2025-10-19T02:53:42.947959"
+  },
+  {
+    "role": "user",
+    "text": "cho tôi bài hát nơi này có những",
+    "timestamp": "2025-10-19T02:53:48.066180"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát Nơi Này Có Anh.",
+    "timestamp": "2025-10-19T02:53:48.066998"
+  },
+  {
+    "role": "user",
+    "text": "Dừng thoát bài hát.",
+    "timestamp": "2025-10-19T02:53:55.799098"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tạm dừng bài hát Nơi Này Có Anh.",
+    "timestamp": "2025-10-19T02:53:55.799841"
+  },
+  {
+    "role": "user",
+    "text": "Bạn có thể trên hàng thôi đang cầm cái gì nữa?",
+    "timestamp": "2025-10-19T02:56:57.443155"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi thấy bạn đang cầm một chiếc điện thoại di động.",
+    "timestamp": "2025-10-19T02:56:57.444030"
+  },
+  {
+    "role": "user",
+    "text": "Đọc cho tôi chữ trên hình ảnh này.",
+    "timestamp": "2025-10-19T02:57:10.513161"
+  },
+  {
+    "role": "assistant",
+    "text": "Xin lỗi, tôi không thể đọc được chữ trên hình ảnh đó vì nó quá mờ và không rõ ràng.",
+    "timestamp": "2025-10-19T02:57:10.513983"
+  },
+  {
+    "role": "user",
+    "text": "Cái điện thoại này có ốp màu gì ạ?",
+    "timestamp": "2025-10-19T02:57:24.079780"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi không thể xác định màu của ốp điện thoại vì hình ảnh không hiển thị rõ phần ốp.",
+    "timestamp": "2025-10-19T02:57:24.080628"
+  },
+  {
+    "role": "user",
+    "text": "Bạn thấy tôi như thế nào?",
+    "timestamp": "2025-10-19T02:57:34.527407"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi thấy bạn đang nhìn vào màn hình điện thoại.",
+    "timestamp": "2025-10-19T02:57:34.528187"
+  },
+  {
+    "role": "user",
+    "text": "Mô tả ấy, mô tả con người ấy.",
+    "timestamp": "2025-10-19T02:57:46.571759"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn là một người đàn ông trẻ tuổi, có mái tóc đen, hơi xoăn và đang nhìn chăm chú vào màn hình điện thoại.",
+    "timestamp": "2025-10-19T02:57:46.572588"
+  },
+  {
+    "role": "user",
+    "text": "Ốc không xong tóc thẳng mà.",
+    "timestamp": "2025-10-19T02:57:52.964425"
+  },
+  {
+    "role": "assistant",
+    "text": "Xin lỗi, tôi đã nhầm. Mái tóc của bạn trông thẳng.",
+    "timestamp": "2025-10-19T02:57:52.965237"
+  },
+  {
+    "role": "user",
+    "text": "K chuyện cười đi.",
+    "timestamp": "2025-10-19T02:58:00.961778"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có muốn tôi kể một câu chuyện cười không?",
+    "timestamp": "2025-10-19T02:58:00.962588"
+  },
+  {
+    "role": "user",
+    "text": "Alo ngay đâu đâu đâu rồi?",
+    "timestamp": "2025-10-19T03:15:44.720361"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn ạ?",
+    "timestamp": "2025-10-19T03:15:44.721335"
+  },
+  {
+    "role": "user",
+    "text": "Kể một câu chuyện cười đi.",
+    "timestamp": "2025-10-19T03:16:03.265955"
+  },
+  {
+    "role": "assistant",
+    "text": "Một người đàn ông vào quán bar và gọi một ly nước. Anh ta nhìn thấy một người phụ nữ xinh đẹp đang ngồi một mình ở bàn đối diện. Anh ta lấy hết can đảm, đi đến chỗ cô ấy và hỏi: \"Em có tin vào tình yêu sét đánh không, hay anh phải đi qua đây lần nữa?\".",
+    "timestamp": "2025-10-19T03:16:03.266746"
+  },
+  {
+    "role": "user",
+    "text": "Thôi bạn nói chán quá.",
+    "timestamp": "2025-10-19T03:16:14.418210"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi xin lỗi nếu câu chuyện cười của tôi chưa làm bạn hài lòng. Bạn có muốn tôi thử kể một câu chuyện khác không, hay bạn muốn tôi giúp gì khác?",
+    "timestamp": "2025-10-19T03:16:14.419049"
+  },
+  {
+    "role": "user",
+    "text": "Bạn thấy tôi là người như thế nào?",
+    "timestamp": "2025-10-19T03:16:28.916513"
+  },
+  {
+    "role": "assistant",
+    "text": "Dựa vào hình ảnh, tôi thấy bạn có mái tóc đen, đôi mắt một mí và khuôn mặt khá thân thiện. Phía sau bạn có một chiếc giường tầng và trần nhà màu trắng với hai bóng đèn âm trần.",
+    "timestamp": "2025-10-19T03:16:28.917361"
+  },
+  {
+    "role": "user",
+    "text": "Nhưng mà mất tôi có phải một mí đâu, mất tôi hai mí mà.",
+    "timestamp": "2025-10-19T03:16:41.398333"
+  },
+  {
+    "role": "assistant",
+    "text": "À, tôi xin lỗi vì đã nhầm lẫn. Nhìn kỹ hơn thì đúng là mắt bạn có hai mí. Cảm ơn bạn đã đính chính nhé.",
+    "timestamp": "2025-10-19T03:16:41.399195"
+  },
+  {
+    "role": "user",
+    "text": "Thôi bật cho tôi bài hát ngắn năm ánh sáng đi.",
+    "timestamp": "2025-10-19T03:16:52.519020"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài \"Ngàn Năm Ánh Sáng\" cho bạn rồi nhé. Chúc bạn nghe nhạc vui vẻ.",
+    "timestamp": "2025-10-19T03:16:52.519850"
+  },
+  {
+    "role": "user",
+    "text": "khác nhạc phiến tay nhá.",
+    "timestamp": "2025-10-19T03:17:01.354671"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn tôi tắt nhạc hay chuyển sang bài khác ạ?",
+    "timestamp": "2025-10-19T03:17:01.355494"
+  },
+  {
+    "role": "user",
+    "text": "Tắt nhạc.",
+    "timestamp": "2025-10-19T03:17:06.193643"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng nhạc rồi nhé.",
+    "timestamp": "2025-10-19T03:17:06.194529"
+  },
+  {
+    "role": "user",
+    "text": "Phát bài phép màu đi.",
+    "timestamp": "2025-10-19T03:17:16.891300"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài \"Phép Màu\" cho bạn rồi ạ.",
+    "timestamp": "2025-10-19T03:17:16.892161"
+  },
+  {
+    "role": "user",
+    "text": "Dừng phát nha.",
+    "timestamp": "2025-10-19T03:17:25.404102"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng phát nhạc rồi nhé.",
+    "timestamp": "2025-10-19T03:17:25.404947"
+  },
+  {
+    "role": "user",
+    "text": "Tiếp tục phát nhạc đang phát hiện tại đi.",
+    "timestamp": "2025-10-19T03:17:37.541754"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tiếp tục phát bài \"Phép Màu\" cho bạn rồi nhé.",
+    "timestamp": "2025-10-19T03:17:37.542730"
+  },
+  {
+    "role": "user",
+    "text": "là ban công cho tôi.",
+    "timestamp": "2025-10-19T03:17:47.785406"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật đèn ở ban công cho bạn rồi ạ.",
+    "timestamp": "2025-10-19T03:17:47.786329"
+  },
+  {
+    "role": "user",
+    "text": "Không, tôi muốn tắt cơ.",
+    "timestamp": "2025-10-19T03:17:55.158305"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tắt đèn ở ban công cho bạn rồi nhé.",
+    "timestamp": "2025-10-19T03:17:55.159264"
+  },
+  {
+    "role": "user",
+    "text": "Dừng phát nhạc đi.",
+    "timestamp": "2025-10-19T03:18:02.165527"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã tạm dừng phát nhạc rồi.",
+    "timestamp": "2025-10-19T03:18:02.166433"
+  },
+  {
+    "role": "user",
+    "text": "Bạn thấy hình ảnh tôi gửi không? Đó là hình ảnh gì ạ?",
+    "timestamp": "2025-10-19T03:18:33.039910"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi thấy hình ảnh bạn gửi là một hóa đơn hoặc biên lai viết tay. Trên đó có các thông tin như tên hàng, số lượng, đơn giá, thành tiền, thuế GTGT, tổng cộng tiền thanh toán và thông tin người mua, người bán. Một số thông tin cụ thể có thể đọc được như \"Nước thu nhượng quyền\", \"Chuyển quyền\", \"Giá chuyển nhượng\", \"Thuế GTGT 10%\".",
+    "timestamp": "2025-10-19T03:18:33.040864"
+  },
+  {
+    "role": "user",
+    "text": "Hóa đơn đấy có màu gì?",
+    "timestamp": "2025-10-19T03:18:45.535638"
+  },
+  {
+    "role": "assistant",
+    "text": "Hóa đơn có nền màu trắng và các dòng kẻ ngang màu đỏ. Chữ viết trên hóa đơn có màu xanh và đen.",
+    "timestamp": "2025-10-19T03:18:45.536637"
+  },
+  {
+    "role": "user",
+    "text": "Bạn thấy hình ảnh của tôi chưa?",
+    "timestamp": "2025-10-19T03:19:00.654501"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi đã thấy hình ảnh của bạn rồi. Bạn có muốn tôi giúp gì khác không?",
+    "timestamp": "2025-10-19T03:19:00.655505"
+  },
+  {
+    "role": "user",
+    "text": "Có phải ở chương trình nha, tôi có một cái thiết bị báo cháy không?",
+    "timestamp": "2025-10-19T03:19:09.776938"
+  },
+  {
+    "role": "assistant",
+    "text": "Đúng vậy, trên trần nhà của bạn có một thiết bị báo cháy màu trắng, hình tròn.",
+    "timestamp": "2025-10-19T03:19:09.777942"
+  },
+  {
+    "role": "user",
+    "text": "Cái cặp của tôi phía sau ấy nó màu gì?",
+    "timestamp": "2025-10-19T03:19:19.397861"
+  },
+  {
+    "role": "assistant",
+    "text": "Chiếc cặp phía sau bạn có màu đen.",
+    "timestamp": "2025-10-19T03:19:19.398805"
+  },
+  {
+    "role": "user",
+    "text": "Tóc của tôi nó có bù xùi quá không?",
+    "timestamp": "2025-10-19T03:19:30.086440"
+  },
+  {
+    "role": "assistant",
+    "text": "Mái tóc của bạn trông khá bồng bềnh và tự nhiên.",
+    "timestamp": "2025-10-19T03:19:30.087443"
+  },
+  {
+    "role": "user",
+    "text": "Bạn nghĩ tôi uống nên uống hay nên nhu?",
+    "timestamp": "2025-10-19T03:19:50.433854"
+  },
+  {
+    "role": "assistant",
+    "text": "Việc uốn hay nhuộm tóc còn tùy thuộc vào sở thích và phong cách cá nhân của bạn. Nếu bạn muốn thay đổi kiểu tóc để trông bồng bềnh hơn, bạn có thể thử uốn. Còn nếu bạn muốn thay đổi màu sắc để trông nổi bật hơn, bạn có thể thử nhuộm.",
+    "timestamp": "2025-10-19T03:19:50.435048"
+  },
+  {
+    "role": "user",
+    "text": "Thôi, phát bài hát hiện tại đi.",
+    "timestamp": "2025-10-19T03:19:59.417414"
+  },
+  {
+    "role": "user",
+    "text": "อ",
+    "timestamp": "2025-10-19T03:20:06.185132"
+  },
+  {
+    "role": "assistant",
+    "text": "Bài hát \"Phép Màu\" đang được phát tiếp rồi nhé.",
+    "timestamp": "2025-10-19T03:20:06.186188"
   }
 ]

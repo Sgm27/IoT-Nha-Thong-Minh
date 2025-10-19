@@ -1058,6 +1058,20 @@ export default function App() {
             }
             return;
           }
+          case "connection_error": {
+            const message =
+              typeof data.message === "string"
+                ? data.message
+                : "Không thể kết nối tới Gemini. Ứng dụng đang chuyển sang chế độ ngoại tuyến.";
+            setIsGeminiConnected(false);
+            setGeminiStatus(message);
+            appendChatMessage({
+              role: "system",
+              content: message
+            });
+            showFeedback(message, true);
+            return;
+          }
           case "tool_call": {
             const functionName = typeof data.function_name === "string" ? data.function_name : "unknown";
             appendChatMessage({
@@ -1214,6 +1228,8 @@ export default function App() {
       beginMusicPlayback,
       pauseCurrentMusic,
       playAssistantAudio,
+      setGeminiStatus,
+      setIsGeminiConnected,
       resumeCurrentMusic,
       showFeedback,
       updateAssistantMessage
@@ -1886,24 +1902,26 @@ export default function App() {
                 ) : null}
               </div>
               {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
-              <div className="relative h-48 w-full">
-                <video
-                  ref={cameraVideoRef}
-                  className={cn(
-                    "absolute inset-0 h-full w-full rounded-md border object-cover transition-opacity",
-                    isCameraStreaming ? "opacity-100" : "pointer-events-none opacity-0"
-                  )}
-                  autoPlay
-                  muted
-                  playsInline
-                />
-                <div
-                  className={cn(
-                    "absolute inset-0 flex items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground transition-opacity",
-                    isCameraStreaming ? "pointer-events-none opacity-0" : "opacity-100"
-                  )}
-                >
-                  Camera đang tắt
+              <div className="relative mx-auto w-full max-w-md">
+                <div className="relative aspect-video">
+                  <video
+                    ref={cameraVideoRef}
+                    className={cn(
+                      "absolute inset-0 h-full w-full rounded-md border bg-black object-contain transition-opacity",
+                      isCameraStreaming ? "opacity-100" : "pointer-events-none opacity-0"
+                    )}
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+                  <div
+                    className={cn(
+                      "absolute inset-0 flex items-center justify-center rounded-md border border-dashed bg-background/90 text-xs text-muted-foreground transition-opacity",
+                      isCameraStreaming ? "pointer-events-none opacity-0" : "opacity-100"
+                    )}
+                  >
+                    Camera đang tắt
+                  </div>
                 </div>
               </div>
             </div>

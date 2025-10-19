@@ -101,6 +101,7 @@ class GeminiService:
         config = self._create_live_config(previous_session_handle)
 
         send_task = receive_task = ping_task = None
+        fallback_message: Optional[Dict[str, Any]] = None
         try:
             async with self.client.aio.live.connect(model=self.model, config=config) as session:
                 send_task = asyncio.create_task(
@@ -121,10 +122,27 @@ class GeminiService:
                     task.result()
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected by client")
+        except TimeoutError as exc:
+            logger.error("Gemini connection timed out during handshake: %s", exc)
+            fallback_message = {
+                "type": "connection_error",
+                "code": "gemini_handshake_timeout",
+                "message": "Không thể kết nối tới Gemini (timeout). Ứng dụng sẽ chuyển sang chế độ ngoại tuyến.",
+            }
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.exception("Gemini session failed: %s", exc)
+            fallback_message = {
+                "type": "connection_error",
+                "code": "gemini_session_error",
+                "message": "Gemini gặp sự cố khi thiết lập phiên. Ứng dụng sẽ chuyển sang chế độ ngoại tuyến.",
+            }
         finally:
             for task in filter(None, [send_task, receive_task, ping_task]):
                 if not task.done():
                     task.cancel()
+            if fallback_message and websocket.client_state.name == "CONNECTED":
+                await self._send_safely(websocket, fallback_message)
+                await self._run_offline_loop(websocket)
             self._send_locks.pop(websocket, None)
 
     async def _run_offline_loop(self, websocket: WebSocket) -> None:
@@ -146,12 +164,20 @@ class GeminiService:
     # Gemini streaming relays
     # ------------------------------------------------------------------
     async def _relay_client_to_gemini(self, websocket: WebSocket, session) -> None:
+        logger.info("🚀 Client -> Gemini relay started")
         try:
-            logger.info("🚀 Client -> Gemini relay started")
             while True:
-                message = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=settings.websocket_receive_timeout
-                )
+                try:
+                    message = await asyncio.wait_for(
+                        websocket.receive_text(), timeout=settings.websocket_receive_timeout
+                    )
+                except asyncio.TimeoutError:
+                    logger.debug(
+                        "⏳ No client message received in %s seconds; continuing to listen",
+                        settings.websocket_receive_timeout,
+                    )
+                    continue
+
                 data = json.loads(message)
                 logger.debug(f"📥 Received from client: {list(data.keys())}")
 
@@ -191,10 +217,13 @@ class GeminiService:
                         websocket, data["voice_notification_request"]
                     )
                     continue
-        except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for client message")
         except WebSocketDisconnect:
             logger.info("Client disconnected (send loop)")
+        except asyncio.CancelledError:
+            logger.info("Client -> Gemini relay cancelled")
+            raise
+        except Exception:
+            logger.exception("❌ Unexpected error in client relay loop")
         finally:
             logger.info("Client -> Gemini relay stopped")
 
