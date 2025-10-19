@@ -2,7 +2,8 @@ import asyncio
 import json
 import logging
 import threading
-from dataclasses import asdict, dataclass
+import time
+from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Literal
@@ -213,19 +214,60 @@ class MusicService:
                 return item
         return None
 
+    def get_song_duration(self, track_title: str) -> Optional[float]:
+        file_path = self.find_song_file(track_title)
+        if not file_path:
+            return None
+        try:
+            from mutagen import File  # type: ignore
+        except ImportError:
+            logger.debug("mutagen library is not available; cannot determine song duration")
+            return None
+
+        try:
+            audio = File(file_path)
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Failed to read audio metadata for %%s", file_path)
+            return None
+
+        if audio is None or getattr(audio, "info", None) is None:
+            return None
+
+        length = getattr(audio.info, "length", None)
+        if length is None:
+            return None
+        try:
+            return float(length)
+        except (TypeError, ValueError):
+            return None
+
 
 @dataclass
 class MusicPlaybackState:
     requested_title: Optional[str] = None
     matched_song: Optional[str] = None
     status: Literal["stopped", "playing", "paused"] = "stopped"
+    position_seconds: float = 0.0
+    duration_seconds: Optional[float] = None
+    updated_at: float = field(default_factory=lambda: time.time())
 
     def copy(self) -> "MusicPlaybackState":
         return MusicPlaybackState(
             requested_title=self.requested_title,
             matched_song=self.matched_song,
             status=self.status,
+            position_seconds=self.position_seconds,
+            duration_seconds=self.duration_seconds,
+            updated_at=self.updated_at,
         )
+
+    def effective_position(self, reference_time: Optional[float] = None) -> float:
+        base_position = max(self.position_seconds, 0.0)
+        if self.status != "playing":
+            return base_position
+        now = reference_time or time.time()
+        elapsed = max(0.0, now - self.updated_at)
+        return base_position + elapsed
 
 
 class SmartHomeService:
@@ -237,12 +279,50 @@ class SmartHomeService:
         self.lighting_service = lighting_service or LightingService()
         self.music_service = music_service or MusicService()
         self._music_playback_state = MusicPlaybackState()
+        self._music_listeners: List[
+            Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[dict]"]
+        ] = []
+        self._music_listener_lock = threading.Lock()
 
     def turn_on_light(self, location: str) -> LightState:
         return self.lighting_service.toggle_light(location, True)
 
     def turn_off_light(self, location: str) -> LightState:
         return self.lighting_service.toggle_light(location, False)
+
+    def _notify_music_listeners(self, payload: dict) -> None:
+        with self._music_listener_lock:
+            listeners = list(self._music_listeners)
+        for loop, queue in listeners:
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, payload)
+            except RuntimeError:
+                self.remove_music_listener(queue)
+
+    async def add_music_listener(self) -> "asyncio.Queue[dict]":
+        loop = asyncio.get_running_loop()
+        queue: "asyncio.Queue[dict]" = asyncio.Queue()
+        with self._music_listener_lock:
+            self._music_listeners.append((loop, queue))
+        await queue.put({"type": "snapshot", "state": self._serialize_music_state()})
+        return queue
+
+    def remove_music_listener(self, queue: "asyncio.Queue[dict]") -> None:
+        with self._music_listener_lock:
+            self._music_listeners = [
+                (loop, q) for loop, q in self._music_listeners if q is not queue
+            ]
+
+    def _serialize_music_state(self) -> dict:
+        state = self.get_music_playback_state()
+        return {
+            "requested_title": state.requested_title,
+            "matched_song": state.matched_song,
+            "status": state.status,
+            "position_seconds": state.position_seconds,
+            "duration_seconds": state.duration_seconds,
+            "updated_at": state.updated_at,
+        }
 
     def play_music(self, title: str) -> Optional[str]:
         matched = self.music_service.choose_song(title)
@@ -251,13 +331,20 @@ class SmartHomeService:
                 requested_title=title,
                 matched_song=matched,
                 status="playing",
+                position_seconds=0.0,
+                duration_seconds=self.music_service.get_song_duration(matched),
+                updated_at=time.time(),
             )
         else:
             self._music_playback_state = MusicPlaybackState(
                 requested_title=title,
                 matched_song=None,
                 status="stopped",
+                position_seconds=0.0,
+                duration_seconds=None,
+                updated_at=time.time(),
             )
+        self._notify_music_listeners({"type": "update", "state": self._serialize_music_state()})
         return matched
 
     def get_song_file(self, title: str) -> Optional[Path]:
@@ -270,19 +357,46 @@ class SmartHomeService:
         return self.music_service.list_available_songs()
 
     def get_music_playback_state(self) -> MusicPlaybackState:
-        return self._music_playback_state.copy()
+        state = self._music_playback_state.copy()
+        state.position_seconds = state.effective_position()
+        state.updated_at = time.time()
+        return state
 
-    def pause_music(self) -> Optional[str]:
-        if self._music_playback_state.matched_song and self._music_playback_state.status == "playing":
+    def pause_music(self) -> bool:
+        if (
+            self._music_playback_state.matched_song
+            and self._music_playback_state.status == "playing"
+        ):
+            self._music_playback_state.position_seconds = self._music_playback_state.effective_position()
             self._music_playback_state.status = "paused"
-            return self._music_playback_state.matched_song
-        return None
+            self._music_playback_state.updated_at = time.time()
+            self._notify_music_listeners(
+                {"type": "update", "state": self._serialize_music_state()}
+            )
+            return True
+        return False
 
-    def continue_music(self) -> Optional[str]:
-        if self._music_playback_state.matched_song and self._music_playback_state.status == "paused":
+    def continue_music(self) -> bool:
+        if (
+            self._music_playback_state.matched_song
+            and self._music_playback_state.status == "paused"
+        ):
             self._music_playback_state.status = "playing"
-            return self._music_playback_state.matched_song
-        return None
+            self._music_playback_state.updated_at = time.time()
+            self._notify_music_listeners(
+                {"type": "update", "state": self._serialize_music_state()}
+            )
+            return True
+        return False
+
+    def seek_music(self, position_seconds: float) -> MusicPlaybackState:
+        position = max(0.0, position_seconds)
+        self._music_playback_state.position_seconds = position
+        self._music_playback_state.updated_at = time.time()
+        self._notify_music_listeners(
+            {"type": "update", "state": self._serialize_music_state()}
+        )
+        return self.get_music_playback_state()
 
 
 _global_smart_home_service: Optional[SmartHomeService] = None

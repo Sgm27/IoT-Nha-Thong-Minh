@@ -48,9 +48,19 @@ interface ChatMessage {
   imageDataUrl?: string;
 }
 
+interface MusicPlaybackState {
+  requested_title: string | null;
+  matched_song: string | null;
+  status: "stopped" | "playing" | "paused";
+  position_seconds: number;
+  duration_seconds: number | null;
+  updated_at: number;
+}
+
 interface MusicPlaybackResponse {
   selected_song: string;
   stream_url: string;
+  playback_state: MusicPlaybackState;
 }
 
 async function apiClient<TResponse>(url: string, options: RequestInit = {}): Promise<TResponse> {
@@ -354,11 +364,28 @@ const extractSampleRate = (mimeType?: string, fallback?: number) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 };
 
+const toAbsoluteUrl = (path: string) =>
+  typeof window !== "undefined" ? new URL(path, window.location.origin).toString() : path;
+
+const formatDuration = (value: number | null | undefined) => {
+  if (!Number.isFinite(value) || value == null) {
+    return "00:00";
+  }
+  const totalSeconds = Math.max(0, Math.floor(value));
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+};
+
 export default function App() {
   const [lights, setLights] = useState<LightState[]>([]);
   const [musicLibrary, setMusicLibrary] = useState<string[]>([]);
   const [currentSong, setCurrentSong] = useState<{ title: string; url: string } | null>(null);
   const [isMusicPaused, setIsMusicPaused] = useState<boolean>(false);
+  const [musicState, setMusicState] = useState<MusicPlaybackState | null>(null);
+  const [liveMusicPosition, setLiveMusicPosition] = useState<number>(0);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [lightLocation, setLightLocation] = useState<string>("");
   const [musicTitle, setMusicTitle] = useState<string>("");
@@ -376,8 +403,10 @@ export default function App() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const reconnectTimer = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const musicSocketRef = useRef<WebSocket | null>(null);
   const geminiSocketRef = useRef<WebSocket | null>(null);
   const geminiReconnectTimer = useRef<number | null>(null);
+  const musicReconnectTimer = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<number>(0);
   const playbackQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -393,6 +422,7 @@ export default function App() {
   const pendingInputSamplesRef = useRef<Float32Array | null>(null);
   const recordingWorkletContextRef = useRef<AudioContext | null>(null);
   const autoplayUnlockCleanupRef = useRef<(() => void) | null>(null);
+  const isMusicControlFromServerRef = useRef<boolean>(false);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -671,10 +701,97 @@ export default function App() {
     }
   }, [showFeedback]);
 
+  const refreshMusicState = useCallback(async () => {
+    try {
+      const state = await apiClient<MusicPlaybackState>("/smart-home/music/state");
+      updateMusicState(state);
+    } catch (error) {
+      console.error("Không thể tải trạng thái phát nhạc", error);
+    }
+  }, [updateMusicState]);
+
   useEffect(() => {
     refreshLights();
     refreshMusicLibrary();
-  }, [refreshLights, refreshMusicLibrary]);
+    refreshMusicState();
+  }, [refreshLights, refreshMusicLibrary, refreshMusicState]);
+
+  useEffect(() => {
+    if (!musicState) {
+      setLiveMusicPosition(0);
+      return;
+    }
+
+    if (musicState.status !== "playing") {
+      setLiveMusicPosition(musicState.position_seconds);
+      return;
+    }
+
+    let frame: number;
+    const startTime = performance.now();
+    const basePosition = musicState.position_seconds;
+
+    const tick = () => {
+      const elapsed = (performance.now() - startTime) / 1000;
+      setLiveMusicPosition(basePosition + elapsed);
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [musicState]);
+
+  useEffect(() => {
+    const audioElement = audioPlayerRef.current;
+    if (!audioElement) {
+      return;
+    }
+
+    if (!musicState || !musicState.matched_song || !currentSong) {
+      return;
+    }
+
+    const targetSrc = currentSong.url;
+    if (audioElement.src !== targetSrc) {
+      isMusicControlFromServerRef.current = true;
+      audioElement.src = targetSrc;
+      audioElement.load();
+      window.setTimeout(() => {
+        isMusicControlFromServerRef.current = false;
+      });
+    }
+
+    const desiredTime = musicState.position_seconds;
+    if (Number.isFinite(desiredTime)) {
+      const duration = audioElement.duration;
+      const clamped = Number.isFinite(duration) && duration > 0 ? Math.min(desiredTime, duration) : desiredTime;
+      if (Math.abs(audioElement.currentTime - clamped) > 1) {
+        audioElement.currentTime = clamped;
+      }
+    }
+
+    if (musicState.status === "playing") {
+      if (audioElement.paused) {
+        isMusicControlFromServerRef.current = true;
+        audioElement
+          .play()
+          .catch((error) => {
+            console.warn("Không thể tự động phát nhạc", error);
+          })
+          .finally(() => {
+            window.setTimeout(() => {
+              isMusicControlFromServerRef.current = false;
+            });
+          });
+      }
+    } else if (!audioElement.paused) {
+      isMusicControlFromServerRef.current = true;
+      audioElement.pause();
+      window.setTimeout(() => {
+        isMusicControlFromServerRef.current = false;
+      });
+    }
+  }, [currentSong, musicState]);
 
   const handleImageSelect = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -795,10 +912,7 @@ export default function App() {
 
   const beginMusicPlayback = useCallback(
     async (title: string, streamUrl: string): Promise<boolean> => {
-      const absoluteUrl =
-        typeof window !== "undefined"
-          ? new URL(streamUrl, window.location.origin).toString()
-          : streamUrl;
+      const absoluteUrl = toAbsoluteUrl(streamUrl);
       let playbackStarted = false;
       const audioElement = audioPlayerRef.current;
       if (audioElement) {
@@ -882,12 +996,17 @@ export default function App() {
       return false;
     }
     try {
+      isMusicControlFromServerRef.current = true;
       audioElement.pause();
       setIsMusicPaused(true);
       return true;
     } catch (error) {
       console.error("Không thể tạm dừng nhạc trên trình duyệt", error);
       return false;
+    } finally {
+      window.setTimeout(() => {
+        isMusicControlFromServerRef.current = false;
+      });
     }
   }, [setIsMusicPaused]);
 
@@ -897,14 +1016,77 @@ export default function App() {
       return false;
     }
     try {
+      isMusicControlFromServerRef.current = true;
       await audioElement.play();
       setIsMusicPaused(false);
       return true;
     } catch (error) {
       console.error("Không thể tiếp tục phát nhạc trên trình duyệt", error);
       return false;
+    } finally {
+      window.setTimeout(() => {
+        isMusicControlFromServerRef.current = false;
+      });
     }
   }, [setIsMusicPaused]);
+
+  const updateMusicState = useCallback(
+    (state: MusicPlaybackState | null) => {
+      if (!state) {
+        setMusicState(null);
+        setLiveMusicPosition(0);
+        setIsMusicPaused(false);
+        setCurrentSong(null);
+        return;
+      }
+
+      setMusicState(state);
+      setLiveMusicPosition(state.position_seconds);
+      setIsMusicPaused(state.status !== "playing");
+      setCurrentSong((previous) => {
+        if (!state.matched_song) {
+          return null;
+        }
+        const params = new URLSearchParams({ title: state.matched_song });
+        const absoluteUrl = toAbsoluteUrl(`/smart-home/music/stream?${params.toString()}`);
+        if (previous && previous.title === state.matched_song && previous.url === absoluteUrl) {
+          return previous;
+        }
+        return { title: state.matched_song, url: absoluteUrl };
+      });
+    },
+    [setCurrentSong, setIsMusicPaused]
+  );
+
+  const handleMusicPause = useCallback(async () => {
+    if (isMusicControlFromServerRef.current) {
+      return;
+    }
+    setIsMusicPaused(true);
+    try {
+      const state = await apiClient<MusicPlaybackState>("/smart-home/music/pause", {
+        method: "POST"
+      });
+      updateMusicState(state);
+    } catch (error) {
+      console.error("Không thể cập nhật trạng thái tạm dừng", error);
+    }
+  }, [updateMusicState]);
+
+  const handleMusicPlay = useCallback(async () => {
+    if (isMusicControlFromServerRef.current) {
+      return;
+    }
+    setIsMusicPaused(false);
+    try {
+      const state = await apiClient<MusicPlaybackState>("/smart-home/music/resume", {
+        method: "POST"
+      });
+      updateMusicState(state);
+    } catch (error) {
+      console.error("Không thể cập nhật trạng thái phát nhạc", error);
+    }
+  }, [updateMusicState]);
 
   const appendChatMessage = useCallback((message: Omit<ChatMessage, "id" | "timestamp"> & { id?: string }) => {
     setChatMessages((previous) => [
@@ -1294,6 +1476,60 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
+    const connect = () => {
+      if (!isMounted || musicSocketRef.current) {
+        return;
+      }
+
+      try {
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const socket = new WebSocket(`${protocol}://${window.location.host}/smart-home/music/updates`);
+        musicSocketRef.current = socket;
+
+        socket.addEventListener("message", (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.state && (payload.type === "snapshot" || payload.type === "update")) {
+              updateMusicState(payload.state as MusicPlaybackState);
+            }
+          } catch (error) {
+            console.error("Không thể phân tích dữ liệu trạng thái nhạc", error);
+          }
+        });
+
+        socket.addEventListener("close", () => {
+          if (musicSocketRef.current === socket) {
+            musicSocketRef.current = null;
+          }
+          if (isMounted) {
+            musicReconnectTimer.current = window.setTimeout(connect, 3000);
+          }
+        });
+
+        socket.addEventListener("error", () => {
+          socket.close();
+        });
+      } catch (error) {
+        console.error("Không thể kết nối websocket nhạc", error);
+      }
+    };
+
+    connect();
+
+    return () => {
+      isMounted = false;
+      if (musicReconnectTimer.current) {
+        window.clearTimeout(musicReconnectTimer.current);
+        musicReconnectTimer.current = null;
+      }
+      musicSocketRef.current?.close();
+      musicSocketRef.current = null;
+    };
+  }, [updateMusicState]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     const connectGemini = () => {
       if (!isMounted || geminiSocketRef.current) {
         return;
@@ -1414,6 +1650,7 @@ export default function App() {
           body: JSON.stringify({ title })
         });
         const playbackStarted = await beginMusicPlayback(response.selected_song, response.stream_url);
+        updateMusicState(response.playback_state);
         if (playbackStarted) {
           showFeedback(`Đang phát bài: ${response.selected_song}`);
         } else {
@@ -1429,7 +1666,7 @@ export default function App() {
         }
       }
     },
-    [beginMusicPlayback, musicTitle, showFeedback]
+    [beginMusicPlayback, musicTitle, showFeedback, updateMusicState]
   );
 
   const hasLights = lights.length > 0;
@@ -1789,9 +2026,19 @@ export default function App() {
               <div className="space-y-3">
                 <div className="rounded-lg border bg-background p-4">
                   <p className="text-sm font-semibold">
-                    {currentSong
-                      ? `${isMusicPaused ? "Đang tạm dừng" : "Đang phát"}: ${currentSong.title}`
+                    {musicState?.matched_song
+                      ? `${musicState.status === "paused" ? "Đang tạm dừng" : "Đang phát"}: ${musicState.matched_song}`
                       : "Chưa phát bài hát nào"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {musicState
+                      ? (() => {
+                          const durationText = musicState.duration_seconds
+                            ? ` / ${formatDuration(musicState.duration_seconds)}`
+                            : "";
+                          return `Thời gian: ${formatDuration(liveMusicPosition)}${durationText}`;
+                        })()
+                      : "Đang chờ trạng thái phát nhạc từ máy chủ."}
                   </p>
                   <audio
                     ref={audioPlayerRef}
@@ -1801,8 +2048,16 @@ export default function App() {
                     preload="auto"
                     controls
                     src={currentSong?.url}
-                    onPause={() => setIsMusicPaused(true)}
-                    onPlay={() => setIsMusicPaused(false)}
+                    onPause={() => {
+                      void handleMusicPause();
+                    }}
+                    onPlay={() => {
+                      void handleMusicPlay();
+                    }}
+                    onTimeUpdate={(event) => {
+                      const element = event.currentTarget;
+                      setLiveMusicPosition(element.currentTime);
+                    }}
                   >
                     Trình duyệt của bạn không hỗ trợ phát nhạc.
                   </audio>
