@@ -701,6 +701,34 @@ export default function App() {
     }
   }, [showFeedback]);
 
+  const updateMusicState = useCallback(
+    (state: MusicPlaybackState | null) => {
+      if (!state) {
+        setMusicState(null);
+        setLiveMusicPosition(0);
+        setIsMusicPaused(false);
+        setCurrentSong(null);
+        return;
+      }
+
+      setMusicState(state);
+      setLiveMusicPosition(state.position_seconds);
+      setIsMusicPaused(state.status !== "playing");
+      setCurrentSong((previous) => {
+        if (!state.matched_song) {
+          return null;
+        }
+        const params = new URLSearchParams({ title: state.matched_song });
+        const absoluteUrl = toAbsoluteUrl(`/smart-home/music/stream?${params.toString()}`);
+        if (previous && previous.title === state.matched_song && previous.url === absoluteUrl) {
+          return previous;
+        }
+        return { title: state.matched_song, url: absoluteUrl };
+      });
+    },
+    [setCurrentSong, setIsMusicPaused]
+  );
+
   const refreshMusicState = useCallback(async () => {
     try {
       const state = await apiClient<MusicPlaybackState>("/smart-home/music/state");
@@ -1029,34 +1057,6 @@ export default function App() {
       });
     }
   }, [setIsMusicPaused]);
-
-  const updateMusicState = useCallback(
-    (state: MusicPlaybackState | null) => {
-      if (!state) {
-        setMusicState(null);
-        setLiveMusicPosition(0);
-        setIsMusicPaused(false);
-        setCurrentSong(null);
-        return;
-      }
-
-      setMusicState(state);
-      setLiveMusicPosition(state.position_seconds);
-      setIsMusicPaused(state.status !== "playing");
-      setCurrentSong((previous) => {
-        if (!state.matched_song) {
-          return null;
-        }
-        const params = new URLSearchParams({ title: state.matched_song });
-        const absoluteUrl = toAbsoluteUrl(`/smart-home/music/stream?${params.toString()}`);
-        if (previous && previous.title === state.matched_song && previous.url === absoluteUrl) {
-          return previous;
-        }
-        return { title: state.matched_song, url: absoluteUrl };
-      });
-    },
-    [setCurrentSong, setIsMusicPaused]
-  );
 
   const handleMusicPause = useCallback(async () => {
     if (isMusicControlFromServerRef.current) {
