@@ -1,21 +1,30 @@
 package com.example.iot_nha_thong_minh.ui.chat
 
+import android.Manifest
+import android.content.Intent
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,25 +35,111 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.iot_nha_thong_minh.data.model.ChatMessage
 import com.example.iot_nha_thong_minh.data.model.ChatRole
+import java.util.Locale
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var messageInput by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
+
+    val context = LocalContext.current
+    val speechRecognizerAvailable = remember { SpeechRecognizer.isRecognitionAvailable(context) }
+    var hasMicPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        hasMicPermission = granted
+        if (granted) {
+            viewModel.onMicrophonePermissionGranted()
+            viewModel.setListening(true)
+        } else {
+            viewModel.onMicrophonePermissionDenied()
+        }
+    }
+
+    val speechRecognizer = remember {
+        if (speechRecognizerAvailable) SpeechRecognizer.createSpeechRecognizer(context) else null
+    }
+    val recognitionIntent = remember {
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale("vi", "VN"))
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        }
+    }
+    val latestViewModel by rememberUpdatedState(viewModel)
+
+    DisposableEffect(speechRecognizer) {
+        if (speechRecognizer != null) {
+            val listener = object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    latestViewModel.setListening(false)
+                }
+
+                override fun onError(error: Int) {
+                    val message = when (error) {
+                        SpeechRecognizer.ERROR_AUDIO -> "Không thể thu âm. Vui lòng thử lại."
+                        SpeechRecognizer.ERROR_CLIENT -> "Ứng dụng không thể truy cập micro."
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Thiết bị chưa cấp quyền micro."
+                        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                            "Kết nối mạng không ổn định khi ghi âm."
+                        SpeechRecognizer.ERROR_NO_MATCH -> "Không nhận diện được giọng nói. Thử nói rõ hơn nhé."
+                        else -> "Đã xảy ra lỗi khi nhận diện giọng nói."
+                    }
+                    latestViewModel.onSpeechError(message)
+                }
+
+                override fun onResults(results: Bundle?) {
+                    val transcripts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val bestResult = transcripts?.firstOrNull()?.trim().orEmpty()
+                    latestViewModel.setListening(false)
+                    if (bestResult.isNotEmpty()) {
+                        latestViewModel.onSpeechResult(bestResult)
+                    }
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            }
+            speechRecognizer.setRecognitionListener(listener)
+        }
+
+        onDispose {
+            speechRecognizer?.setRecognitionListener(null)
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        }
+    }
 
     LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {
@@ -52,7 +147,35 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LaunchedEffect(uiState.isListening, hasMicPermission, speechRecognizer, speechRecognizerAvailable) {
+        if (!speechRecognizerAvailable) {
+            if (uiState.isListening) {
+                viewModel.onSpeechError("Thiết bị không hỗ trợ trò chuyện bằng giọng nói.")
+                viewModel.setListening(false)
+            }
+            return@LaunchedEffect
+        }
+        val recognizer = speechRecognizer ?: return@LaunchedEffect
+        if (uiState.isListening && hasMicPermission) {
+            try {
+                recognizer.startListening(recognitionIntent)
+            } catch (error: Exception) {
+                viewModel.onSpeechError("Không thể khởi động micro. Vui lòng thử lại.")
+                viewModel.setListening(false)
+            }
+        } else {
+            recognizer.stopListening()
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        StatusCard(isConnected = uiState.isConnected, statusMessage = uiState.statusMessage)
+
         ElevatedCard(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (uiState.messages.isEmpty()) {
                 Column(
@@ -60,7 +183,11 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("Hãy bắt đầu cuộc trò chuyện với trợ lý AI.", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Hãy bắt đầu cuộc trò chuyện với trợ lý AI.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                    )
                 }
             } else {
                 LazyColumn(
@@ -75,44 +202,79 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             }
         }
 
-        if (uiState.lastSuggestions.isNotEmpty()) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    uiState.lastSuggestions.forEach { suggestion ->
-                        AssistChip(onClick = {
-                            messageInput = suggestion
-                        }, label = { Text(suggestion, textAlign = TextAlign.Center) })
-                    }
-                }
-            }
+        if (!speechRecognizerAvailable) {
+            Text(
+                "Thiết bị của bạn không hỗ trợ nhận diện giọng nói.",
+                color = MaterialTheme.colorScheme.error,
+            )
+        } else if (uiState.isMicPermissionDenied && !hasMicPermission) {
+            Text(
+                "Vui lòng cấp quyền micro để trò chuyện bằng giọng nói.",
+                color = MaterialTheme.colorScheme.error,
+            )
         }
 
         uiState.errorMessage?.let {
             Text(it, color = MaterialTheme.colorScheme.error)
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconToggleButton(checked = uiState.isListening, onCheckedChange = { viewModel.toggleMicrophone() }) {
-                Icon(imageVector = if (uiState.isListening) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconToggleButton(
+                    modifier = Modifier.size(56.dp),
+                    checked = uiState.isListening,
+                    onCheckedChange = { enabled ->
+                        if (!uiState.isConnected) {
+                            viewModel.onSpeechError("Đang kết nối tới Gemini, vui lòng đợi...")
+                            return@IconToggleButton
+                        }
+                        if (enabled) {
+                            if (!speechRecognizerAvailable) {
+                                viewModel.onSpeechError("Thiết bị không hỗ trợ trò chuyện bằng giọng nói.")
+                            } else if (!hasMicPermission) {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                viewModel.onMicrophonePermissionGranted()
+                                viewModel.setListening(true)
+                            }
+                        } else {
+                            viewModel.setListening(false)
+                        }
+                    },
+                    enabled = uiState.isConnected,
+                ) {
+                    Icon(
+                        imageVector = if (uiState.isListening) Icons.Default.Mic else Icons.Default.MicOff,
+                        contentDescription = null,
+                    )
+                }
+                Text(
+                    text = if (uiState.isListening) "Đang lắng nghe" else "Nhấn để nói",
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
+
             OutlinedTextField(
                 modifier = Modifier.weight(1f),
                 value = messageInput,
                 onValueChange = { messageInput = it },
                 label = { Text("Nhập tin nhắn") },
                 singleLine = true,
-                enabled = !uiState.isSending,
+                enabled = uiState.isConnected,
             )
-            Button(onClick = {
-                if (messageInput.isNotBlank()) {
-                    viewModel.sendMessage(messageInput)
-                    messageInput = ""
-                }
-            }, enabled = messageInput.isNotBlank() && !uiState.isSending) {
+
+            Button(
+                onClick = {
+                    if (messageInput.isNotBlank()) {
+                        viewModel.sendMessage(messageInput)
+                        messageInput = ""
+                    }
+                },
+                enabled = messageInput.isNotBlank() && uiState.isConnected,
+            ) {
                 Icon(Icons.Default.Send, contentDescription = null)
             }
         }
@@ -120,16 +282,55 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun StatusCard(isConnected: Boolean, statusMessage: String) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Trạng thái kết nối", style = MaterialTheme.typography.titleSmall)
+                Text(statusMessage, style = MaterialTheme.typography.bodyMedium)
+            }
+            val indicatorColor: Color = if (isConnected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.tertiary
+            }
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(indicatorColor),
+            )
+        }
+    }
+}
+
+@Composable
 private fun MessageBubble(message: ChatMessage) {
-    val isAssistant = message.role == ChatRole.ASSISTANT
-    val background = if (isAssistant) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    val alignment = if (isAssistant) Alignment.Start else Alignment.End
+    val (background, alignment) = when (message.role) {
+        ChatRole.USER -> MaterialTheme.colorScheme.surfaceVariant to Alignment.End
+        ChatRole.ASSISTANT -> MaterialTheme.colorScheme.primaryContainer to Alignment.Start
+        ChatRole.SYSTEM -> MaterialTheme.colorScheme.secondaryContainer to Alignment.CenterHorizontally
+    }
+    val textAlign = when (message.role) {
+        ChatRole.USER -> TextAlign.End
+        ChatRole.SYSTEM -> TextAlign.Center
+        else -> TextAlign.Start
+    }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = alignment) {
         Card(colors = CardDefaults.cardColors(containerColor = background)) {
             Text(
                 modifier = Modifier.padding(12.dp),
                 text = message.content,
-                style = MaterialTheme.typography.bodyMedium,
+                style = if (message.isStreaming) {
+                    MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic)
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
+                textAlign = textAlign,
             )
         }
     }

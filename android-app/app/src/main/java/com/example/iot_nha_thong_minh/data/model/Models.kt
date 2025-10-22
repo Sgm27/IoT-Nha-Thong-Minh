@@ -5,13 +5,14 @@ data class Light(
     val isOn: Boolean,
 )
 
-enum class ChatRole { USER, ASSISTANT }
+enum class ChatRole { USER, ASSISTANT, SYSTEM }
 
 data class ChatMessage(
     val id: Long,
     val role: ChatRole,
     val content: String,
     val timestampMillis: Long,
+    val isStreaming: Boolean = false,
 )
 
 enum class PlaybackStatus { PLAYING, PAUSED, STOPPED }
