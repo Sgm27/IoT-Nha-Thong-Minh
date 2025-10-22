@@ -2,12 +2,15 @@ package com.example.iot_nha_thong_minh.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -23,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,13 +39,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.iot_nha_thong_minh.data.model.ChatMessage
 import com.example.iot_nha_thong_minh.data.model.ChatRole
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var messageInput by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(uiState.messages.size) {
+        if (uiState.messages.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.messages.lastIndex)
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        ElevatedCard(modifier = Modifier.weight(1f)) {
+        ElevatedCard(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (uiState.messages.isEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -53,6 +65,7 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(16.dp),
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(uiState.messages) { message ->
@@ -64,14 +77,15 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
 
         if (uiState.lastSuggestions.isNotEmpty()) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     uiState.lastSuggestions.forEach { suggestion ->
                         AssistChip(onClick = {
                             messageInput = suggestion
-                        }, label = { Text(suggestion) })
+                        }, label = { Text(suggestion, textAlign = TextAlign.Center) })
                     }
                 }
             }
@@ -94,9 +108,11 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 enabled = !uiState.isSending,
             )
             Button(onClick = {
-                viewModel.sendMessage(messageInput)
-                messageInput = ""
-            }, enabled = !uiState.isSending) {
+                if (messageInput.isNotBlank()) {
+                    viewModel.sendMessage(messageInput)
+                    messageInput = ""
+                }
+            }, enabled = messageInput.isNotBlank() && !uiState.isSending) {
                 Icon(Icons.Default.Send, contentDescription = null)
             }
         }

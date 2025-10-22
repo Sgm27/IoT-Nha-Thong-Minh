@@ -21,7 +21,6 @@ data class MusicUiState(
     val library: List<String> = emptyList(),
     val playbackState: MusicPlaybackState? = null,
     val playbackPosition: Double = 0.0,
-    val currentStreamUrl: String? = null,
     val errorMessage: String? = null,
     val infoMessage: String? = null,
 )
@@ -74,8 +73,8 @@ class MusicViewModel(private val repository: SmartHomeRepository) : ViewModel() 
                     true
                 }
                 .collect { message ->
-                val state = message.toPlaybackState() ?: return@collect
-                applyPlaybackState(state)
+                    val state = message.toPlaybackState() ?: return@collect
+                    applyPlaybackState(state)
                 }
         }
     }
@@ -104,18 +103,11 @@ class MusicViewModel(private val repository: SmartHomeRepository) : ViewModel() 
         }
     }
 
-    private fun applyPlaybackState(state: MusicPlaybackState?, streamUrlOverride: String? = null) {
+    private fun applyPlaybackState(state: MusicPlaybackState?) {
         _uiState.update { previous ->
-            val resolvedUrl = when {
-                streamUrlOverride != null -> streamUrlOverride
-                state?.matchedSong != null -> repository.buildStreamUrlForSong(state.matchedSong)
-                else -> null
-            }
-            val currentUrl = resolvedUrl ?: previous.currentStreamUrl?.takeIf { state?.matchedSong != null }
             previous.copy(
                 playbackState = state,
                 playbackPosition = state?.positionSeconds ?: 0.0,
-                currentStreamUrl = currentUrl,
                 errorMessage = null,
                 infoMessage = null,
             )
@@ -134,8 +126,7 @@ class MusicViewModel(private val repository: SmartHomeRepository) : ViewModel() 
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val response = repository.requestPlayMusic(trimmed)
-                val streamUrl = repository.toAbsoluteUrl(response.streamUrl)
-                applyPlaybackState(response.playbackState.toDomain(), streamUrl)
+                applyPlaybackState(response.playbackState.toDomain())
                 _uiState.update { it.copy(infoMessage = "Đang phát bài: ${response.selectedSong}") }
             } catch (error: Exception) {
                 _uiState.update { state ->

@@ -21,7 +21,6 @@ import okhttp3.Request
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
-private const val BASE_HTTP_URL = "https://iot.sonktx.online"
 private const val BASE_WS_URL = "wss://iot.sonktx.online"
 
 class SmartHomeRepository(
@@ -96,21 +95,4 @@ class SmartHomeRepository(
     }
 
     suspend fun sendChat(message: String): ChatResponseDto = api.sendChat(ChatRequestDto(message))
-
-    fun toAbsoluteUrl(path: String): String {
-        val trimmed = path.trim()
-        val base = BASE_HTTP_URL.trimEnd('/')
-        return if (trimmed.startsWith("http")) {
-            trimmed
-        } else if (trimmed.startsWith('/')) {
-            "$base$trimmed"
-        } else {
-            "$base/$trimmed"
-        }
-    }
-
-    fun buildStreamUrlForSong(songTitle: String): String {
-        val encoded = java.net.URLEncoder.encode(songTitle, Charsets.UTF_8.name())
-        return toAbsoluteUrl("/smart-home/music/stream?title=$encoded")
-    }
 }
