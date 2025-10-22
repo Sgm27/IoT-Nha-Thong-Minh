@@ -84,6 +84,8 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     }
 
     var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
+    var isRecognitionActive by remember { mutableStateOf(false) }
+    var ignoreNextClientError by remember { mutableStateOf(false) }
     val recognitionIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -97,15 +99,29 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         val recognizer = speechRecognizer
         if (recognizer != null) {
             val listener = object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onReadyForSpeech(params: Bundle?) {
+                    isRecognitionActive = true
+                }
+
+                override fun onBeginningOfSpeech() {
+                    isRecognitionActive = true
+                }
+
                 override fun onEndOfSpeech() {
+                    isRecognitionActive = false
                     latestViewModel.setListening(false)
                 }
 
                 override fun onError(error: Int) {
+                    val shouldIgnore = ignoreNextClientError && error == SpeechRecognizer.ERROR_CLIENT
+                    ignoreNextClientError = false
+                    isRecognitionActive = false
+                    if (shouldIgnore) {
+                        latestViewModel.setListening(false)
+                        return
+                    }
                     val message = when (error) {
                         SpeechRecognizer.ERROR_AUDIO -> "Không thể thu âm. Vui lòng thử lại."
                         SpeechRecognizer.ERROR_CLIENT -> "Ứng dụng không thể truy cập micro."
@@ -121,6 +137,8 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 override fun onResults(results: Bundle?) {
                     val transcripts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val bestResult = transcripts?.firstOrNull()?.trim().orEmpty()
+                    ignoreNextClientError = false
+                    isRecognitionActive = false
                     latestViewModel.setListening(false)
                     if (bestResult.isNotEmpty()) {
                         latestViewModel.onSpeechResult(bestResult)
@@ -133,6 +151,8 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             recognizer.setRecognitionListener(listener)
 
             onDispose {
+                ignoreNextClientError = false
+                isRecognitionActive = false
                 recognizer.setRecognitionListener(null)
                 recognizer.cancel()
                 recognizer.destroy()
@@ -175,15 +195,25 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
 
             try {
                 recognizer.startListening(recognitionIntent)
+                isRecognitionActive = true
+                ignoreNextClientError = false
             } catch (error: Exception) {
                 viewModel.onSpeechError("Không thể khởi động micro. Vui lòng thử lại.")
                 viewModel.setListening(false)
             }
         } else {
-            speechRecognizer?.stopListening()
+            val recognizer = speechRecognizer
+            if (recognizer != null && isRecognitionActive) {
+                ignoreNextClientError = true
+                try {
+                    recognizer.stopListening()
+                } catch (_: Exception) {
+                }
+            }
             if (!hasMicPermission && speechRecognizer != null) {
                 speechRecognizer = null
             }
+            isRecognitionActive = false
         }
     }
 

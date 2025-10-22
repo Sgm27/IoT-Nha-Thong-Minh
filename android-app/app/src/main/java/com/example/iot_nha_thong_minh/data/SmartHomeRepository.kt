@@ -1,6 +1,8 @@
 package com.example.iot_nha_thong_minh.data
 
 import android.util.Log
+import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeEvent
+import com.example.iot_nha_thong_minh.data.remote.GeminiWebSocketClient
 import com.example.iot_nha_thong_minh.data.remote.LightDto
 import com.example.iot_nha_thong_minh.data.remote.LightRequestDto
 import com.example.iot_nha_thong_minh.data.remote.LightStreamMessageDto
@@ -9,20 +11,16 @@ import com.example.iot_nha_thong_minh.data.remote.MusicPlayResponseDto
 import com.example.iot_nha_thong_minh.data.remote.MusicRequestDto
 import com.example.iot_nha_thong_minh.data.remote.MusicSeekRequestDto
 import com.example.iot_nha_thong_minh.data.remote.MusicStreamMessageDto
-import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeEvent
-import com.example.iot_nha_thong_minh.data.remote.GeminiWebSocketClient
 import com.example.iot_nha_thong_minh.data.remote.SmartHomeApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-
-private const val BASE_WS_URL = "wss://iot.sonktx.online"
 
 class SmartHomeRepository(
     private val api: SmartHomeApi,
@@ -40,7 +38,7 @@ class SmartHomeRepository(
 
     fun observeLights(): Flow<LightStreamMessageDto> = callbackFlow {
         val request = Request.Builder()
-            .url("$BASE_WS_URL/smart-home/lights/stream")
+            .url("${EnvironmentConfig.wsBaseUrl}/smart-home/lights/stream")
             .build()
 
         val listener = object : WebSocketListener() {
@@ -77,7 +75,7 @@ class SmartHomeRepository(
 
     fun observeMusicUpdates(): Flow<MusicStreamMessageDto> = callbackFlow {
         val request = Request.Builder()
-            .url("$BASE_WS_URL/smart-home/music/updates")
+            .url("${EnvironmentConfig.wsBaseUrl}/smart-home/music/updates")
             .build()
 
         val listener = object : WebSocketListener() {

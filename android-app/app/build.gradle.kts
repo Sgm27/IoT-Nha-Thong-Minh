@@ -17,6 +17,22 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val defaultApiBaseUrl = "https://iot.sonktx.online/"
+        val defaultWsBaseUrl = "wss://iot.sonktx.online"
+        val apiBaseUrl = (project.findProperty("APP_API_BASE_URL") as? String)?.takeIf { it.isNotBlank() }
+            ?: defaultApiBaseUrl
+        val wsBaseUrl = (project.findProperty("APP_WS_BASE_URL") as? String)?.takeIf { it.isNotBlank() }
+            ?: defaultWsBaseUrl
+        val geminiWsUrl = (project.findProperty("APP_GEMINI_WS_URL") as? String)?.takeIf { it.isNotBlank() }
+            ?: run {
+                val trimmedWs = wsBaseUrl.trimEnd('/')
+                "$trimmedWs/ws/gemini"
+            }
+
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "WS_BASE_URL", "\"$wsBaseUrl\"")
+        buildConfigField("String", "GEMINI_WS_URL", "\"$geminiWsUrl\"")
     }
 
     buildTypes {
@@ -37,6 +53,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
