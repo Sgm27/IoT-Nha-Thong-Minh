@@ -83,9 +83,7 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    val speechRecognizer = remember {
-        if (speechRecognizerAvailable) SpeechRecognizer.createSpeechRecognizer(context) else null
-    }
+    var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     val recognitionIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -96,7 +94,8 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     val latestViewModel by rememberUpdatedState(viewModel)
 
     DisposableEffect(speechRecognizer) {
-        if (speechRecognizer != null) {
+        val recognizer = speechRecognizer
+        if (recognizer != null) {
             val listener = object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
                 override fun onBeginningOfSpeech() {}
@@ -131,13 +130,15 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             }
-            speechRecognizer.setRecognitionListener(listener)
-        }
+            recognizer.setRecognitionListener(listener)
 
-        onDispose {
-            speechRecognizer?.setRecognitionListener(null)
-            speechRecognizer?.cancel()
-            speechRecognizer?.destroy()
+            onDispose {
+                recognizer.setRecognitionListener(null)
+                recognizer.cancel()
+                recognizer.destroy()
+            }
+        } else {
+            onDispose { }
         }
     }
 
@@ -147,7 +148,7 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(uiState.isListening, hasMicPermission, speechRecognizer, speechRecognizerAvailable) {
+    LaunchedEffect(uiState.isListening, hasMicPermission, speechRecognizerAvailable) {
         if (!speechRecognizerAvailable) {
             if (uiState.isListening) {
                 viewModel.onSpeechError("Thiết bị không hỗ trợ trò chuyện bằng giọng nói.")
@@ -155,8 +156,19 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             }
             return@LaunchedEffect
         }
-        val recognizer = speechRecognizer ?: return@LaunchedEffect
         if (uiState.isListening && hasMicPermission) {
+            val recognizer = speechRecognizer ?: run {
+                try {
+                    SpeechRecognizer.createSpeechRecognizer(context).also { created ->
+                        speechRecognizer = created
+                    }
+                } catch (error: Exception) {
+                    viewModel.onSpeechError("Không thể khởi tạo micro. Vui lòng thử lại.")
+                    viewModel.setListening(false)
+                    null
+                }
+            } ?: return@LaunchedEffect
+
             try {
                 recognizer.startListening(recognitionIntent)
             } catch (error: Exception) {
@@ -164,7 +176,10 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 viewModel.setListening(false)
             }
         } else {
-            recognizer.stopListening()
+            speechRecognizer?.stopListening()
+            if (!hasMicPermission && speechRecognizer != null) {
+                speechRecognizer = null
+            }
         }
     }
 
