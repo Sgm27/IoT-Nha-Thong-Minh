@@ -64,7 +64,7 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
 
     val context = LocalContext.current
-    val speechRecognizerAvailable = remember { SpeechRecognizer.isRecognitionAvailable(context) }
+    var speechRecognizerAvailable by remember { mutableStateOf(false) }
     var hasMicPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -140,6 +140,10 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         } else {
             onDispose { }
         }
+    }
+
+    LaunchedEffect(context) {
+        speechRecognizerAvailable = SpeechRecognizer.isRecognitionAvailable(context)
     }
 
     LaunchedEffect(uiState.messages.size) {
@@ -247,7 +251,9 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                             return@IconToggleButton
                         }
                         if (enabled) {
-                            if (!speechRecognizerAvailable) {
+                            val isAvailable = SpeechRecognizer.isRecognitionAvailable(context)
+                            speechRecognizerAvailable = isAvailable
+                            if (!isAvailable) {
                                 viewModel.onSpeechError("Thiết bị không hỗ trợ trò chuyện bằng giọng nói.")
                             } else if (!hasMicPermission) {
                                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
