@@ -1,8 +1,6 @@
 package com.example.iot_nha_thong_minh.data
 
 import android.util.Log
-import com.example.iot_nha_thong_minh.data.remote.ChatRequestDto
-import com.example.iot_nha_thong_minh.data.remote.ChatResponseDto
 import com.example.iot_nha_thong_minh.data.remote.LightDto
 import com.example.iot_nha_thong_minh.data.remote.LightRequestDto
 import com.example.iot_nha_thong_minh.data.remote.LightStreamMessageDto
@@ -11,10 +9,13 @@ import com.example.iot_nha_thong_minh.data.remote.MusicPlayResponseDto
 import com.example.iot_nha_thong_minh.data.remote.MusicRequestDto
 import com.example.iot_nha_thong_minh.data.remote.MusicSeekRequestDto
 import com.example.iot_nha_thong_minh.data.remote.MusicStreamMessageDto
+import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeEvent
+import com.example.iot_nha_thong_minh.data.remote.GeminiWebSocketClient
 import com.example.iot_nha_thong_minh.data.remote.SmartHomeApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,6 +29,10 @@ class SmartHomeRepository(
     private val okHttpClient: OkHttpClient,
     private val json: Json,
 ) {
+    private val geminiClient = GeminiWebSocketClient(okHttpClient, json)
+
+    val geminiEvents: SharedFlow<GeminiRealtimeEvent> = geminiClient.events
+
     suspend fun fetchLights(): List<LightDto> = api.getLights()
 
     suspend fun toggleLight(location: String, turnOn: Boolean): LightDto =
@@ -94,5 +99,13 @@ class SmartHomeRepository(
         awaitClose { socket.cancel() }
     }
 
-    suspend fun sendChat(message: String): ChatResponseDto = api.sendChat(ChatRequestDto(message))
+    fun connectGemini() {
+        geminiClient.connect()
+    }
+
+    fun disconnectGemini() {
+        geminiClient.disconnect()
+    }
+
+    fun sendGeminiText(message: String): Boolean = geminiClient.sendText(message)
 }

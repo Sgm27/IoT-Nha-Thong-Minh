@@ -31,6 +31,7 @@ fun ChatResponseDto.toMessages(nextId: Long): List<ChatMessage> = buildList {
             role = ChatRole.ASSISTANT,
             content = reply,
             timestampMillis = System.currentTimeMillis(),
+            isStreaming = false,
         )
     )
 }
