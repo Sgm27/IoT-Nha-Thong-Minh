@@ -73,6 +73,10 @@ class GeminiService:
         if not self.conversation_history_file.exists():
             self.conversation_history_file.write_text("[]", encoding="utf-8")
 
+        self._captured_images_dir: Path = settings.captured_images_directory
+        if settings.save_captured_image:
+            self._captured_images_dir.mkdir(parents=True, exist_ok=True)
+
         self._current_user_input = ""
         self._current_assistant_output = ""
         self._send_locks: Dict[WebSocket, asyncio.Lock] = {}
@@ -485,11 +489,40 @@ class GeminiService:
         audio_blob = blob if mime.startswith("audio/") else None
         media_blob = blob if mime.startswith("image/") else None
 
+        if media_blob and settings.save_captured_image:
+            try:
+                self._save_captured_image(payload_bytes, mime)
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("❌ Không thể lưu ảnh từ realtime_input")
+
         if not audio_blob and not media_blob:
             logger.debug("Bỏ qua realtime_input với mime type không hỗ trợ: %s", mime)
             return
 
         await session.send_realtime_input(audio=audio_blob, media=media_blob)
+
+    def _save_captured_image(self, data: bytes, mime: str) -> None:
+        extension = self._infer_extension_from_mime(mime)
+        timestamp = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%S_%f")
+        filename = f"capture_{timestamp}{extension}"
+        filepath = self._captured_images_dir / filename
+        filepath.write_bytes(data)
+        logger.debug("💾 Đã lưu ảnh chụp từ camera tại %s", filepath)
+
+    @staticmethod
+    def _infer_extension_from_mime(mime: str) -> str:
+        subtype = mime.split("/")[-1].lower()
+        if subtype in {"jpeg", "jpg"}:
+            return ".jpg"
+        if subtype == "png":
+            return ".png"
+        if subtype == "gif":
+            return ".gif"
+        if subtype in {"bmp", "bitmap"}:
+            return ".bmp"
+        if subtype == "webp":
+            return ".webp"
+        return ".bin"
 
     # ------------------------------------------------------------------
     # Tool handling

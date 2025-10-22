@@ -28,6 +28,19 @@ def _env_int(name: str, default: int) -> int:
     return int(value) if value is not None else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    return default
+
+
 def _env_str(name: str, default: Optional[str]) -> Optional[str]:
     value = os.getenv(name)
     if value is None:
@@ -74,6 +87,12 @@ class Settings:
     )
     websocket_config_timeout: int = field(
         default_factory=lambda: _env_int("WEBSOCKET_CONFIG_TIMEOUT", 10)
+    )
+    save_captured_image: bool = field(
+        default_factory=lambda: _env_bool("SAVE_CAPTURED_IMAGE", False)
+    )
+    captured_images_directory: Path = field(
+        default_factory=lambda: _env_path("CAPTURED_IMAGES_DIRECTORY", Path("data") / "images")
     )
     default_lights: tuple[tuple[str, bool], ...] = field(
         default_factory=lambda: (
