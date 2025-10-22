@@ -68,6 +68,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                     state.copy(
                         isSending = false,
                         errorMessage = error.message ?: "Không thể gửi tin nhắn",
+                        lastSuggestions = emptyList(),
                     )
                 }
             }

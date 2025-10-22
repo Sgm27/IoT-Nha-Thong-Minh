@@ -20,7 +20,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,67 +28,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import com.example.iot_nha_thong_minh.data.model.PlaybackStatus
-import kotlin.math.abs
 
 @Composable
 fun MusicScreen(viewModel: MusicViewModel, modifier: Modifier = Modifier) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
-    val context = LocalContext.current
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            playWhenReady = true
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    LaunchedEffect(uiState.currentStreamUrl) {
-        val url = uiState.currentStreamUrl
-        if (url == null) {
-            exoPlayer.stop()
-            exoPlayer.clearMediaItems()
-        } else {
-            val current = exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
-            if (current != url) {
-                exoPlayer.setMediaItem(MediaItem.fromUri(url))
-                exoPlayer.prepare()
-            }
-        }
-    }
-
-    LaunchedEffect(uiState.playbackState?.status, uiState.playbackPosition) {
-        val state = uiState.playbackState ?: return@LaunchedEffect
-        val targetMs = (uiState.playbackPosition * 1000).toLong()
-        if (abs(exoPlayer.currentPosition - targetMs) > 1000) {
-            exoPlayer.seekTo(targetMs)
-        }
-        when (state.status) {
-            PlaybackStatus.PLAYING -> {
-                exoPlayer.playWhenReady = true
-                if (!exoPlayer.isPlaying) {
-                    exoPlayer.play()
-                }
-            }
-            PlaybackStatus.PAUSED, PlaybackStatus.STOPPED -> {
-                if (exoPlayer.isPlaying) {
-                    exoPlayer.pause()
-                }
-            }
-        }
-    }
 
     var songTitle by rememberSaveable { mutableStateOf("") }
 
@@ -138,9 +85,11 @@ fun MusicScreen(viewModel: MusicViewModel, modifier: Modifier = Modifier) {
             }
         }
 
-        AndroidView(
-            factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
+        Text(
             modifier = Modifier.fillMaxWidth(),
+            text = "Âm thanh sẽ phát trên máy chủ trung tâm. Ứng dụng đóng vai trò điều khiển từ xa.",
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyMedium,
         )
 
         OutlinedTextField(
