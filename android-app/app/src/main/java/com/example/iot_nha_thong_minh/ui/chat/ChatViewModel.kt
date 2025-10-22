@@ -8,6 +8,7 @@ import com.example.iot_nha_thong_minh.data.model.ChatRole
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeAudio
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeEvent
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeTranscription
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,16 +61,27 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
         }
     }
 
-    fun onSpeechResult(text: String) {
-        if (text.isNotBlank()) {
-            sendMessage(text)
-        } else {
-            setListening(false)
-        }
-    }
-
     fun onSpeechError(message: String) {
         _uiState.update { it.copy(errorMessage = message, isListening = false) }
+    }
+
+    fun sendAudioChunk(data: ByteArray, sampleRate: Int) {
+        if (data.isEmpty()) {
+            return
+        }
+        val normalizedRate = if (sampleRate > 0) sampleRate else 16_000
+        viewModelScope.launch(Dispatchers.IO) {
+            val success = repository.sendGeminiRealtimeAudio(data, normalizedRate)
+            if (!success) {
+                _uiState.update {
+                    it.copy(
+                        isListening = false,
+                        errorMessage = "Không thể gửi dữ liệu giọng nói tới Gemini. Đang thử kết nối lại...",
+                    )
+                }
+                scheduleReconnect()
+            }
+        }
     }
 
     fun sendMessage(content: String) {

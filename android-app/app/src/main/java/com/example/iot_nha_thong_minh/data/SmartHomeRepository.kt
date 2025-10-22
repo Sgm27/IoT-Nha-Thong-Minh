@@ -106,4 +106,7 @@ class SmartHomeRepository(
     }
 
     fun sendGeminiText(message: String): Boolean = geminiClient.sendText(message)
+
+    fun sendGeminiRealtimeAudio(data: ByteArray, sampleRate: Int): Boolean =
+        geminiClient.sendRealtimeAudio(data, sampleRate)
 }
