@@ -2,6 +2,7 @@ package com.example.iot_nha_thong_minh.data.remote
 
 import android.util.Base64
 import android.util.Log
+import com.example.iot_nha_thong_minh.data.EnvironmentConfig
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
@@ -23,8 +24,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
-private const val GEMINI_WS_URL = "wss://iot.sonktx.online/ws/gemini"
-
 class GeminiWebSocketClient(
     private val okHttpClient: OkHttpClient,
     private val json: Json,
@@ -44,7 +43,7 @@ class GeminiWebSocketClient(
         }
 
         val request = Request.Builder()
-            .url(GEMINI_WS_URL)
+            .url(EnvironmentConfig.geminiWsUrl)
             .build()
 
         okHttpClient.newWebSocket(request, object : WebSocketListener() {
