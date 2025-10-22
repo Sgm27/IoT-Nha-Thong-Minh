@@ -19,14 +19,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 interface LightState {
@@ -378,6 +370,41 @@ const formatDuration = (value: number | null | undefined) => {
   const seconds = (totalSeconds % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
 };
+
+const LightBulbIcon = ({ isOn }: { isOn: boolean }) => (
+  <svg
+    viewBox="0 0 64 64"
+    role="img"
+    aria-hidden="true"
+    className={cn("light-bulb-icon", isOn ? "light-bulb-icon--on" : "light-bulb-icon--off")}
+  >
+    <path
+      className="light-bulb-glass"
+      d="M32 6C20.954 6 12 14.954 12 26c0 7.01 3.646 13.28 9.59 16.86 1.56.92 2.41 2.63 2.41 4.42v3.72a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.72c0-1.79.85-3.5 2.41-4.42C48.354 39.28 52 33.01 52 26c0-11.046-8.954-20-20-20Z"
+    />
+    <path
+      className="light-bulb-highlight"
+      d="M24 18c2.667-3.333 6.667-5 12-5"
+      strokeLinecap="round"
+      strokeWidth={3}
+    />
+    <path
+      className="light-bulb-filament"
+      d="M24 36c3 0 4 4 8 4s5-4 8-4"
+      strokeLinecap="round"
+      strokeWidth={4}
+    />
+    <path
+      className="light-bulb-filament"
+      d="M26 40h12"
+      strokeLinecap="round"
+      strokeWidth={3}
+    />
+    <rect className="light-bulb-base" x="24" y="45" width="16" height="5" rx="2.5" />
+    <rect className="light-bulb-base" x="22" y="50" width="20" height="5" rx="2.5" />
+    <rect className="light-bulb-base" x="26" y="55" width="12" height="5" rx="2.5" />
+  </svg>
+);
 
 export default function App() {
   const [lights, setLights] = useState<LightState[]>([]);
@@ -1972,32 +1999,35 @@ export default function App() {
 
               <div className="space-y-3">
                 <h3 className="text-lg font-semibold">Trạng thái các đèn</h3>
-                <div className="overflow-hidden rounded-lg border bg-background">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-1/2">Vị trí</TableHead>
-                        <TableHead>Trạng thái</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {hasLights ? (
-                        lights.map((light) => (
-                          <TableRow key={normalizeLocation(light.location)}>
-                            <TableCell className="font-medium">{light.location}</TableCell>
-                            <TableCell>{light.is_on ? "Bật" : "Tắt"}</TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={2} className="text-center text-muted-foreground">
-                            Chưa có dữ liệu
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                {hasLights ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                    {lights.map((light) => (
+                      <div
+                        key={normalizeLocation(light.location)}
+                        className={cn(
+                          "light-card group relative flex flex-col items-center gap-3 rounded-2xl border bg-gradient-to-br p-4 text-center shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
+                          light.is_on
+                            ? "from-yellow-50/80 via-amber-50/60 to-amber-100/40 border-yellow-200/80 shadow-[0_18px_40px_-25px_rgba(250,204,21,0.85)] dark:from-amber-500/20 dark:via-amber-500/10 dark:to-amber-500/5 dark:border-amber-400/60"
+                            : "from-slate-100/80 via-slate-100/60 to-slate-200/40 border-slate-200/80 shadow-[0_16px_38px_-28px_rgba(15,23,42,0.85)] dark:from-slate-800/70 dark:via-slate-900/60 dark:to-slate-900/40 dark:border-slate-700/60"
+                        )}
+                      >
+                        <LightBulbIcon isOn={light.is_on} />
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold tracking-wide text-foreground">
+                            {light.location}
+                          </p>
+                          <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                            {light.is_on ? "Đang bật" : "Đang tắt"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex min-h-[140px] flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+                    Chưa có dữ liệu
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
