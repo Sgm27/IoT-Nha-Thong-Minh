@@ -13,6 +13,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -23,6 +24,8 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+
+private const val DEFAULT_AUDIO_SAMPLE_RATE = 16_000
 
 class GeminiWebSocketClient(
     private val okHttpClient: OkHttpClient,
@@ -91,6 +94,38 @@ class GeminiWebSocketClient(
         val timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
         val payload = "{" + "\"keepalive\":{" + "\"timestamp\":\"$timestamp\"" + "}}"
         sendRaw(payload)
+    }
+
+    fun sendRealtimeAudio(data: ByteArray, sampleRate: Int): Boolean {
+        if (data.isEmpty()) {
+            return false
+        }
+        val encoded = try {
+            Base64.encodeToString(data, Base64.NO_WRAP)
+        } catch (error: IllegalArgumentException) {
+            Log.e("GeminiWebSocket", "Không thể mã hóa dữ liệu âm thanh", error)
+            return false
+        }
+        val mimeSampleRate = if (sampleRate > 0) sampleRate else DEFAULT_AUDIO_SAMPLE_RATE
+        val payload = buildJsonObject {
+            put(
+                "realtime_input",
+                buildJsonObject {
+                    put(
+                        "media_chunks",
+                        buildJsonArray {
+                            add(
+                                buildJsonObject {
+                                    put("mime_type", "audio/pcm;rate=$mimeSampleRate")
+                                    put("data", encoded)
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        }
+        return sendRaw(json.encodeToString(JsonObject.serializer(), payload))
     }
 
     private fun sendRaw(payload: String): Boolean {

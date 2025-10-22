@@ -1,11 +1,6 @@
 package com.example.iot_nha_thong_minh.ui.chat
 
 import android.Manifest
-import android.content.Intent
-import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -42,7 +37,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,7 +49,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.iot_nha_thong_minh.data.model.ChatMessage
 import com.example.iot_nha_thong_minh.data.model.ChatRole
-import java.util.Locale
 
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
@@ -64,7 +57,8 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
 
     val context = LocalContext.current
-    var speechRecognizerAvailable by remember { mutableStateOf(false) }
+    val audioRecorder = remember { GeminiAudioRecorder() }
+    val isRecorderSupported = remember { audioRecorder.isSupported }
     var hasMicPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -77,93 +71,21 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         hasMicPermission = granted
         if (granted) {
             viewModel.onMicrophonePermissionGranted()
-            viewModel.setListening(true)
+            if (isRecorderSupported) {
+                viewModel.setListening(true)
+            } else {
+                viewModel.onSpeechError("Thiết bị của bạn không hỗ trợ trò chuyện bằng giọng nói realtime.")
+            }
         } else {
             viewModel.onMicrophonePermissionDenied()
         }
     }
 
-    var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
-    var isRecognitionActive by remember { mutableStateOf(false) }
-    var ignoreNextClientError by remember { mutableStateOf(false) }
-    val recognitionIntent = remember {
-        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale("vi", "VN"))
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+    DisposableEffect(Unit) {
+        onDispose {
+            audioRecorder.stop()
+            audioRecorder.release()
         }
-    }
-    val latestViewModel by rememberUpdatedState(viewModel)
-
-    DisposableEffect(speechRecognizer) {
-        val recognizer = speechRecognizer
-        if (recognizer != null) {
-            val listener = object : RecognitionListener {
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onReadyForSpeech(params: Bundle?) {
-                    isRecognitionActive = true
-                }
-
-                override fun onBeginningOfSpeech() {
-                    isRecognitionActive = true
-                }
-
-                override fun onEndOfSpeech() {
-                    isRecognitionActive = false
-                    latestViewModel.setListening(false)
-                }
-
-                override fun onError(error: Int) {
-                    val shouldIgnore = ignoreNextClientError && error == SpeechRecognizer.ERROR_CLIENT
-                    ignoreNextClientError = false
-                    isRecognitionActive = false
-                    if (shouldIgnore) {
-                        latestViewModel.setListening(false)
-                        return
-                    }
-                    val message = when (error) {
-                        SpeechRecognizer.ERROR_AUDIO -> "Không thể thu âm. Vui lòng thử lại."
-                        SpeechRecognizer.ERROR_CLIENT -> "Ứng dụng không thể truy cập micro."
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Thiết bị chưa cấp quyền micro."
-                        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                            "Kết nối mạng không ổn định khi ghi âm."
-                        SpeechRecognizer.ERROR_NO_MATCH -> "Không nhận diện được giọng nói. Thử nói rõ hơn nhé."
-                        else -> "Đã xảy ra lỗi khi nhận diện giọng nói."
-                    }
-                    latestViewModel.onSpeechError(message)
-                }
-
-                override fun onResults(results: Bundle?) {
-                    val transcripts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val bestResult = transcripts?.firstOrNull()?.trim().orEmpty()
-                    ignoreNextClientError = false
-                    isRecognitionActive = false
-                    latestViewModel.setListening(false)
-                    if (bestResult.isNotEmpty()) {
-                        latestViewModel.onSpeechResult(bestResult)
-                    }
-                }
-
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            }
-            recognizer.setRecognitionListener(listener)
-
-            onDispose {
-                ignoreNextClientError = false
-                isRecognitionActive = false
-                recognizer.setRecognitionListener(null)
-                recognizer.cancel()
-                recognizer.destroy()
-            }
-        } else {
-            onDispose { }
-        }
-    }
-
-    LaunchedEffect(context) {
-        speechRecognizerAvailable = SpeechRecognizer.isRecognitionAvailable(context)
     }
 
     LaunchedEffect(uiState.messages.size) {
@@ -172,48 +94,27 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(uiState.isListening, hasMicPermission, speechRecognizerAvailable) {
-        if (!speechRecognizerAvailable) {
-            if (uiState.isListening) {
-                viewModel.onSpeechError("Thiết bị không hỗ trợ trò chuyện bằng giọng nói.")
-                viewModel.setListening(false)
-            }
-            return@LaunchedEffect
-        }
+    LaunchedEffect(uiState.isListening, hasMicPermission) {
         if (uiState.isListening && hasMicPermission) {
-            val recognizer = speechRecognizer ?: run {
-                try {
-                    SpeechRecognizer.createSpeechRecognizer(context).also { created ->
-                        speechRecognizer = created
-                    }
-                } catch (error: Exception) {
-                    viewModel.onSpeechError("Không thể khởi tạo micro. Vui lòng thử lại.")
+            if (!isRecorderSupported) {
+                viewModel.onSpeechError("Thiết bị của bạn không hỗ trợ trò chuyện bằng giọng nói realtime.")
+                viewModel.setListening(false)
+                return@LaunchedEffect
+            }
+            val started = audioRecorder.start(
+                onChunk = { chunk ->
+                    viewModel.sendAudioChunk(chunk, audioRecorder.sampleRate)
+                },
+                onError = { errorMessage ->
+                    viewModel.onSpeechError(errorMessage)
                     viewModel.setListening(false)
-                    null
-                }
-            } ?: return@LaunchedEffect
-
-            try {
-                recognizer.startListening(recognitionIntent)
-                isRecognitionActive = true
-                ignoreNextClientError = false
-            } catch (error: Exception) {
-                viewModel.onSpeechError("Không thể khởi động micro. Vui lòng thử lại.")
+                },
+            )
+            if (!started) {
                 viewModel.setListening(false)
             }
         } else {
-            val recognizer = speechRecognizer
-            if (recognizer != null && isRecognitionActive) {
-                ignoreNextClientError = true
-                try {
-                    recognizer.stopListening()
-                } catch (_: Exception) {
-                }
-            }
-            if (!hasMicPermission && speechRecognizer != null) {
-                speechRecognizer = null
-            }
-            isRecognitionActive = false
+            audioRecorder.stop()
         }
     }
 
@@ -251,9 +152,9 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
             }
         }
 
-        if (!speechRecognizerAvailable) {
+        if (!isRecorderSupported) {
             Text(
-                "Thiết bị của bạn không hỗ trợ nhận diện giọng nói.",
+                "Thiết bị của bạn không hỗ trợ trò chuyện bằng giọng nói realtime.",
                 color = MaterialTheme.colorScheme.error,
             )
         } else if (uiState.isMicPermissionDenied && !hasMicPermission) {
@@ -281,10 +182,8 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                             return@IconToggleButton
                         }
                         if (enabled) {
-                            val isAvailable = SpeechRecognizer.isRecognitionAvailable(context)
-                            speechRecognizerAvailable = isAvailable
-                            if (!isAvailable) {
-                                viewModel.onSpeechError("Thiết bị không hỗ trợ trò chuyện bằng giọng nói.")
+                            if (!isRecorderSupported) {
+                                viewModel.onSpeechError("Thiết bị của bạn không hỗ trợ trò chuyện bằng giọng nói realtime.")
                             } else if (!hasMicPermission) {
                                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             } else {
@@ -295,7 +194,7 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                             viewModel.setListening(false)
                         }
                     },
-                    enabled = uiState.isConnected,
+                    enabled = uiState.isConnected && isRecorderSupported,
                 ) {
                     Icon(
                         imageVector = if (uiState.isListening) Icons.Default.Mic else Icons.Default.MicOff,
