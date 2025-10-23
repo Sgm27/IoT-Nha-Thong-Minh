@@ -72,7 +72,7 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         if (granted) {
             viewModel.onMicrophonePermissionGranted()
             if (isRecorderSupported) {
-                viewModel.setListening(true)
+                viewModel.startListening()
             } else {
                 viewModel.onSpeechError("Thiết bị của bạn không hỗ trợ trò chuyện bằng giọng nói realtime.")
             }
@@ -98,7 +98,7 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
         if (uiState.isListening && hasMicPermission) {
             if (!isRecorderSupported) {
                 viewModel.onSpeechError("Thiết bị của bạn không hỗ trợ trò chuyện bằng giọng nói realtime.")
-                viewModel.setListening(false)
+                viewModel.stopListening()
                 return@LaunchedEffect
             }
             val started = audioRecorder.start(
@@ -107,11 +107,11 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                 },
                 onError = { errorMessage ->
                     viewModel.onSpeechError(errorMessage)
-                    viewModel.setListening(false)
+                    viewModel.stopListening()
                 },
             )
             if (!started) {
-                viewModel.setListening(false)
+                viewModel.stopListening()
             }
         } else {
             audioRecorder.stop()
@@ -188,10 +188,10 @@ fun ChatScreen(viewModel: ChatViewModel, modifier: Modifier = Modifier) {
                                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             } else {
                                 viewModel.onMicrophonePermissionGranted()
-                                viewModel.setListening(true)
+                                viewModel.onListeningToggleRequested(true)
                             }
                         } else {
-                            viewModel.setListening(false)
+                            viewModel.onListeningToggleRequested(false)
                         }
                     },
                     enabled = uiState.isConnected && isRecorderSupported,

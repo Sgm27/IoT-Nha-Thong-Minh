@@ -35,15 +35,39 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
     private var streamingAssistantMessageId: Long? = null
     private var reconnectJob: Job? = null
     private val audioPlayer = GeminiAudioPlayer()
+    private var resumeListeningAfterPlayback = false
 
     init {
         observeGeminiEvents()
         repository.connectGemini()
     }
 
-    fun setListening(isListening: Boolean) {
+    fun startListening() {
+        updateListeningState(isListening = true)
+    }
+
+    fun stopListening() {
+        updateListeningState(isListening = false)
+    }
+
+    fun onListeningToggleRequested(enabled: Boolean) {
+        if (enabled) {
+            startListening()
+        } else {
+            stopListening()
+        }
+    }
+
+    private fun updateListeningState(isListening: Boolean, clearResumeFlag: Boolean = true) {
+        if (clearResumeFlag) {
+            resumeListeningAfterPlayback = false
+        }
         _uiState.update { state ->
-            if (state.isListening == isListening) state else state.copy(isListening = isListening, errorMessage = null)
+            if (state.isListening == isListening) {
+                state
+            } else {
+                state.copy(isListening = isListening, errorMessage = null)
+            }
         }
     }
 
@@ -59,10 +83,12 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                 errorMessage = "Ứng dụng cần quyền micro để trò chuyện bằng giọng nói.",
             )
         }
+        resumeListeningAfterPlayback = false
     }
 
     fun onSpeechError(message: String) {
         _uiState.update { it.copy(errorMessage = message, isListening = false) }
+        resumeListeningAfterPlayback = false
     }
 
     fun sendAudioChunk(data: ByteArray, sampleRate: Int) {
@@ -79,6 +105,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                         errorMessage = "Không thể gửi dữ liệu giọng nói tới Gemini. Đang thử kết nối lại...",
                     )
                 }
+                resumeListeningAfterPlayback = false
                 scheduleReconnect()
             }
         }
@@ -182,6 +209,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                 isListening = false,
             )
         }
+        resumeListeningAfterPlayback = false
         scheduleReconnect()
     }
 
@@ -194,6 +222,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                 isListening = false,
             )
         }
+        resumeListeningAfterPlayback = false
         scheduleReconnect()
     }
 
@@ -244,6 +273,10 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
 
             state.copy(messages = updatedMessages)
         }
+
+        if (finished) {
+            onAssistantSpeechFinished()
+        }
     }
 
     private fun onTranscription(transcription: GeminiRealtimeTranscription) {
@@ -253,7 +286,20 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
     }
 
     private fun onAssistantAudio(audio: GeminiRealtimeAudio) {
+        val wasListening = uiState.value.isListening
+        if (wasListening) {
+            resumeListeningAfterPlayback = true
+            updateListeningState(isListening = false, clearResumeFlag = false)
+        }
         audioPlayer.enqueue(audio)
+    }
+
+    private fun onAssistantSpeechFinished() {
+        if (resumeListeningAfterPlayback && uiState.value.isConnected && !uiState.value.isMicPermissionDenied) {
+            updateListeningState(isListening = true)
+        } else {
+            resumeListeningAfterPlayback = false
+        }
     }
 
     private fun onLightUpdate(location: String, isOn: Boolean) {
