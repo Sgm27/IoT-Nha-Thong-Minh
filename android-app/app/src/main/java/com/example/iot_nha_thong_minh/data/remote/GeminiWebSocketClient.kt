@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -216,6 +217,36 @@ class GeminiWebSocketClient(
                 )
                 return
             }
+            "fire_detection_alert" -> {
+                val detection = obj["detection"]?.jsonObject?.let { detectionObj ->
+                    GeminiRealtimeFireDetection(
+                        detectionObj["confidence"]?.jsonPrimitive?.asDoubleOrNull(),
+                        detectionObj["fire_regions"]?.jsonPrimitive?.asIntOrNull(),
+                        detectionObj["fire_percentage"]?.jsonPrimitive?.asDoubleOrNull(),
+                        detectionObj["total_fire_area"]?.jsonPrimitive?.asIntOrNull(),
+                    )
+                }
+                val audioBase64 = obj["audio_base64"]?.jsonPrimitive?.asStringOrNull()
+                val audioFormat = obj["audio_format"]?.jsonPrimitive?.asStringOrNull()
+                val audioSampleRate = obj["audio_sample_rate"]?.jsonPrimitive?.asIntOrNull()
+                val audio = audioBase64?.let {
+                    decodeAudioPayload(it, audioFormat, audioSampleRate)
+                }
+                val messageText = obj["message"]?.jsonPrimitive?.asStringOrNull()
+                    ?: "Cảnh báo cháy!"
+                val triggeredAt = obj["triggered_at"]?.jsonPrimitive?.asStringOrNull()
+                val sourceMime = obj["source_mime_type"]?.jsonPrimitive?.asStringOrNull()
+                _events.tryEmit(
+                    GeminiRealtimeEvent.FireAlert(
+                        message = messageText,
+                        detection = detection,
+                        audio = audio,
+                        triggeredAt = triggeredAt,
+                        sourceMimeType = sourceMime,
+                    ),
+                )
+                return
+            }
         }
 
         obj["transcription"]?.jsonObject?.let { transcription ->
@@ -286,6 +317,13 @@ private fun kotlinx.serialization.json.JsonPrimitive?.asBooleanOrNull(): Boolean
 private fun kotlinx.serialization.json.JsonPrimitive?.asIntOrNull(): Int? =
     try {
         this?.intOrNull
+    } catch (_: Exception) {
+        null
+    }
+
+private fun kotlinx.serialization.json.JsonPrimitive?.asDoubleOrNull(): Double? =
+    try {
+        this?.doubleOrNull
     } catch (_: Exception) {
         null
     }

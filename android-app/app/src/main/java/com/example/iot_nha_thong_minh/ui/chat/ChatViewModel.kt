@@ -8,6 +8,7 @@ import com.example.iot_nha_thong_minh.data.model.ChatRole
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeAudio
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeEvent
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeTranscription
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -216,6 +217,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                     is GeminiRealtimeEvent.SmartHomeLightUpdate -> onLightUpdate(event.location, event.isOn)
                     is GeminiRealtimeEvent.SmartHomeMusic -> onMusicUpdate(event.requestedTitle, event.matchedSong)
                     is GeminiRealtimeEvent.SmartHomeMusicControl -> onMusicControl(event)
+                    is GeminiRealtimeEvent.FireAlert -> onFireAlert(event)
                 }
             }
         }
@@ -384,6 +386,32 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
         }
     }
 
+    private fun onFireAlert(event: GeminiRealtimeEvent.FireAlert) {
+        val baseMessage = event.message.ifBlank {
+            "🚨 Cảnh báo cháy! Vui lòng kiểm tra khu vực ngay lập tức."
+        }
+        val details = mutableListOf<String>()
+        event.detection?.fireRegions?.takeIf { it > 0 }?.let { count ->
+            details += "$count vùng lửa"
+        }
+        event.detection?.confidence?.let { confidence ->
+            details += "độ tin cậy ${formatTwoDecimals(confidence)}%"
+        }
+        event.detection?.firePercentage?.let { percentage ->
+            details += "ảnh hưởng ${formatTwoDecimals(percentage)}% khung hình"
+        }
+        event.triggeredAt?.takeIf { it.isNotBlank() }?.let { timestamp ->
+            details += "thời gian: $timestamp"
+        }
+        val message = if (details.isNotEmpty()) {
+            "$baseMessage (${details.joinToString(", ")})"
+        } else {
+            baseMessage
+        }
+        appendSystemMessage(message)
+        event.audio?.let { onAssistantAudio(it) }
+    }
+
     private fun appendSystemMessage(message: String) {
         val trimmed = message.trim()
         if (trimmed.isEmpty()) {
@@ -398,6 +426,13 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
         )
         _uiState.update { it.copy(messages = it.messages + systemMessage) }
     }
+
+    private fun formatTwoDecimals(value: Double): String =
+        try {
+            String.format(Locale.US, "%.2f", value)
+        } catch (_: Exception) {
+            value.toString()
+        }
 
     private fun scheduleReconnect() {
         if (reconnectJob?.isActive == true) {
