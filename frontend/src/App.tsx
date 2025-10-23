@@ -64,7 +64,8 @@ export default function App() {
     cameraVideoRef,
     isCameraStreaming,
     toggleCameraStream,
-    cameraError
+    cameraError,
+    cameraDimensions
   } = useGeminiRealtime({
     showFeedback,
     onLightUpdate: applyLightUpdate,
@@ -134,6 +135,7 @@ export default function App() {
           onChatKeyDown={handleChatKeyDown}
           maxImageSize={GEMINI_MAX_IMAGE_SIZE}
           cameraVideoRef={cameraVideoRef}
+          cameraDimensions={cameraDimensions}
         />
 
         {feedback?.message && (

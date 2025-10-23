@@ -178,5 +178,205 @@
     "role": "assistant",
     "text": "Đã phát bài \"NGƯỜI NHƯ ANH XỨNG ĐÁNG CÔ ĐƠN\". Nếu bạn muốn nghe bài khác, hãy cho tôi biết nhé.",
     "timestamp": "2025-10-22T16:46:16.956346"
+  },
+  {
+    "role": "user",
+    "text": "Hello, can you hear me?",
+    "timestamp": "2025-10-22T18:01:15.446933"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi nghe rõ. Bạn có cần tôi giúp gì không?",
+    "timestamp": "2025-10-22T18:01:15.456082"
+  },
+  {
+    "role": "user",
+    "text": "Ok, hello.",
+    "timestamp": "2025-10-22T18:01:24.524291"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, bạn có thể cho tôi biết bạn muốn làm gì không?",
+    "timestamp": "2025-10-22T18:01:24.535931"
+  },
+  {
+    "role": "user",
+    "text": "thấy tôi không?",
+    "timestamp": "2025-10-22T18:01:34.063262"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi thấy bạn trong ảnh. Bạn đang ngồi trong một căn phòng khá tối, có vẻ như bạn đang đeo tai nghe.",
+    "timestamp": "2025-10-22T18:01:34.073466"
+  },
+  {
+    "role": "user",
+    "text": "Okay.",
+    "timestamp": "2025-10-22T18:01:48.338009"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có muốn tôi bật đèn lên không?",
+    "timestamp": "2025-10-22T18:01:48.351983"
+  },
+  {
+    "role": "user",
+    "text": "Có.",
+    "timestamp": "2025-10-22T18:01:56.699482"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật đèn trong phòng của bạn rồi nhé.",
+    "timestamp": "2025-10-22T18:01:56.716245"
+  },
+  {
+    "role": "user",
+    "text": "<noise>",
+    "timestamp": "2025-10-22T18:13:00.519713"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay?",
+    "timestamp": "2025-10-22T18:13:00.533992"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn số 1 đã được bật rồi ạ.",
+    "timestamp": "2025-10-22T18:13:08.705008"
+  },
+  {
+    "role": "user",
+    "text": "Alo, có nghe rõ rồi.",
+    "timestamp": "2025-10-22T18:28:57.933486"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay ạ?",
+    "timestamp": "2025-10-22T18:28:57.948602"
+  },
+  {
+    "role": "user",
+    "text": "Chào bạn. Tôi có thể giúp gì cho bạn hôm nay ạ? Bật đèn phong khách cho tôi.",
+    "timestamp": "2025-10-22T18:29:06.706471"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn phòng khách đã được bật rồi ạ. Bạn cần tôi giúp gì nữa không?",
+    "timestamp": "2025-10-22T18:29:06.721487"
+  },
+  {
+    "role": "user",
+    "text": "Đèn phòng khách đã được bật rồi ạ.",
+    "timestamp": "2025-10-22T18:29:10.957839"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi có thể giúp gì khác cho bạn không ạ?",
+    "timestamp": "2025-10-22T18:29:10.973132"
+  },
+  {
+    "role": "user",
+    "text": "Phát cho tôi bài hát khó hồi.",
+    "timestamp": "2025-10-22T18:29:34.554468"
+  },
+  {
+    "role": "assistant",
+    "text": "Xin lỗi, tôi không tìm thấy bài hát nào có tên là \"khó hồi\". Bạn có muốn tôi tìm bài hát nào khác không?",
+    "timestamp": "2025-10-22T18:29:34.572178"
+  },
+  {
+    "role": "user",
+    "text": "Xin lỗi, tôi không tìm thấy bài hát nào có tên là khó hôi.",
+    "timestamp": "2025-10-22T18:29:40.831070"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có muốn tôi tìm bài hát khác không?",
+    "timestamp": "2025-10-22T18:29:40.845143"
+  },
+  {
+    "role": "user",
+    "text": "Hãy tắt đèn văn cùng nha.",
+    "timestamp": "2025-10-23T00:28:32.190627"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn văn phòng đã được tắt rồi ạ.",
+    "timestamp": "2025-10-23T00:28:32.212199"
+  },
+  {
+    "role": "user",
+    "text": "Hãy tắt đèn mặt cắt mình.",
+    "timestamp": "2025-10-23T00:28:47.198873"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có thể nói rõ hơn vị trí của đèn không ạ?",
+    "timestamp": "2025-10-23T00:28:47.217970"
+  },
+  {
+    "role": "user",
+    "text": "Hãy tắt đèn ban công lên.",
+    "timestamp": "2025-10-23T00:28:55.761452"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ban công đã tắt rồi ạ.",
+    "timestamp": "2025-10-23T00:28:55.779029"
+  },
+  {
+    "role": "user",
+    "text": "Hãy bật đèn ở văn phòng đi.",
+    "timestamp": "2025-10-23T00:29:18.625226"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn văn phòng đã được bật rồi ạ.",
+    "timestamp": "2025-10-23T00:29:18.643478"
+  },
+  {
+    "role": "user",
+    "text": "Hello, chào các bạn.",
+    "timestamp": "2025-10-23T00:37:51.401780"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay ạ?",
+    "timestamp": "2025-10-23T00:37:51.415364"
+  },
+  {
+    "role": "user",
+    "text": "Tôi tên là số",
+    "timestamp": "2025-10-23T00:38:08.688796"
+  },
+  {
+    "role": "assistant",
+    "text": "Rất vui được biết bạn. Bạn muốn tôi giúp gì nào?",
+    "timestamp": "2025-10-23T00:38:08.701681"
+  },
+  {
+    "role": "user",
+    "text": "Chào mừng các bạn.",
+    "timestamp": "2025-10-23T00:56:09.664800"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay ạ?",
+    "timestamp": "2025-10-23T00:56:09.681037"
+  },
+  {
+    "role": "user",
+    "text": "Bạn có nhớ tôi là ai không?",
+    "timestamp": "2025-10-23T00:56:25.116439"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi là một trợ lý ảo, tôi không có khả năng ghi nhớ thông tin cá nhân của bạn từ những lần trò chuyện trước. Tôi có thể giúp gì cho bạn lúc này ạ?",
+    "timestamp": "2025-10-23T00:56:25.131751"
+  },
+  {
+    "role": "user",
+    "text": "nó sẽ gồm cái gì ở đây? Hôm nay miêu tả gì ạ?",
+    "timestamp": "2025-10-23T01:19:54.280306"
   }
 ]

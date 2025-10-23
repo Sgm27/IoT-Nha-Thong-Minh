@@ -7,3 +7,8 @@ pydantic
 google-genai
 python-dotenv
 mutagen
+
+# Fire detection dependencies
+opencv-python
+numpy
+playsound==1.2.2

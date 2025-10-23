@@ -20,7 +20,12 @@ def _env_path(name: str, default: Path) -> Path:
 
 def _env_float(name: str, default: float) -> float:
     value = os.getenv(name)
-    return float(value) if value is not None else default
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
 
 def _env_int(name: str, default: int) -> int:
@@ -93,6 +98,9 @@ class Settings:
     )
     captured_images_directory: Path = field(
         default_factory=lambda: _env_path("CAPTURED_IMAGES_DIRECTORY", Path("data") / "images")
+    )
+    capture_interval_seconds: float = field(
+        default_factory=lambda: max(0.1, _env_float("CAPTURE_INTERVAL_SECONDS", 0.5))
     )
     default_lights: tuple[tuple[str, bool], ...] = field(
         default_factory=lambda: (

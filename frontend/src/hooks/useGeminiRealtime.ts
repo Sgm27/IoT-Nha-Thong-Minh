@@ -52,6 +52,8 @@ export const useGeminiRealtime = ({
   const [isMicPermissionDenied, setIsMicPermissionDenied] = useState<boolean>(false);
   const [isCameraStreaming, setIsCameraStreaming] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraDimensions, setCameraDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [cameraCaptureIntervalMs, setCameraCaptureIntervalMs] = useState<number>(CAMERA_FRAME_INTERVAL_MS);
 
   const geminiSocketRef = useRef<WebSocket | null>(null);
   const geminiReconnectTimer = useRef<number | null>(null);
@@ -73,6 +75,30 @@ export const useGeminiRealtime = ({
   const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraCaptureTimerRef = useRef<number | null>(null);
   const cameraSendingRef = useRef<boolean>(false);
+
+  const updateCameraDimensions = useCallback(() => {
+    const video = cameraVideoRef.current;
+    if (!video) {
+      return;
+    }
+
+    const { videoWidth, videoHeight } = video;
+    if (!videoWidth || !videoHeight) {
+      return;
+    }
+
+    const longestEdge = Math.max(videoWidth, videoHeight);
+    const scale = longestEdge > CAMERA_MAX_DIMENSION ? CAMERA_MAX_DIMENSION / longestEdge : 1;
+    const targetWidth = Math.max(1, Math.round(videoWidth * scale));
+    const targetHeight = Math.max(1, Math.round(videoHeight * scale));
+
+    setCameraDimensions((previous) => {
+      if (previous?.width === targetWidth && previous?.height === targetHeight) {
+        return previous;
+      }
+      return { width: targetWidth, height: targetHeight };
+    });
+  }, [setCameraDimensions]);
 
   const clearSelectedImage = useCallback(() => {
     setSelectedImage(null);
@@ -258,6 +284,25 @@ export const useGeminiRealtime = ({
       const data = payload as Record<string, unknown>;
 
       if ("setupComplete" in data) {
+        const setupPayload = data.setupComplete;
+        if (setupPayload && typeof setupPayload === "object") {
+          const setupRecord = setupPayload as Record<string, unknown>;
+          const rawMs = setupRecord.cameraCaptureIntervalMs;
+          const rawSeconds = setupRecord.cameraCaptureIntervalSeconds;
+
+          const parsedMs =
+            typeof rawMs === "number" && Number.isFinite(rawMs) && rawMs > 0
+              ? rawMs
+              : typeof rawSeconds === "number" && Number.isFinite(rawSeconds) && rawSeconds > 0
+                ? rawSeconds * 1000
+                : undefined;
+
+          if (parsedMs !== undefined) {
+            const normalizedMs = Math.max(100, Math.round(parsedMs));
+            setCameraCaptureIntervalMs(normalizedMs);
+          }
+        }
+
         setGeminiStatus("Đã kết nối với Gemini. Bạn có thể trò chuyện ngay!");
         return;
       }
@@ -553,6 +598,7 @@ export const useGeminiRealtime = ({
     }
 
     setIsCameraStreaming(false);
+    setCameraDimensions(null);
   }, []);
 
   const startCameraStream = useCallback(async () => {
@@ -593,10 +639,7 @@ export const useGeminiRealtime = ({
       }
 
       setIsCameraStreaming(true);
-
-      cameraCaptureTimerRef.current = window.setInterval(() => {
-        void captureAndSendCameraFrame();
-      }, CAMERA_FRAME_INTERVAL_MS);
+      updateCameraDimensions();
     } catch (error) {
       console.error("Không thể bật camera", error);
 
@@ -612,7 +655,7 @@ export const useGeminiRealtime = ({
 
       stopCameraStream();
     }
-  }, [captureAndSendCameraFrame, showFeedback, stopCameraStream]);
+  }, [captureAndSendCameraFrame, showFeedback, stopCameraStream, updateCameraDimensions]);
 
   const toggleCameraStream = useCallback(() => {
     if (isCameraStreaming) {
@@ -621,6 +664,27 @@ export const useGeminiRealtime = ({
       void startCameraStream();
     }
   }, [isCameraStreaming, startCameraStream, stopCameraStream]);
+
+  useEffect(() => {
+    if (!isCameraStreaming) {
+      return;
+    }
+
+    if (cameraCaptureTimerRef.current) {
+      window.clearInterval(cameraCaptureTimerRef.current);
+    }
+
+    cameraCaptureTimerRef.current = window.setInterval(() => {
+      void captureAndSendCameraFrame();
+    }, cameraCaptureIntervalMs);
+
+    return () => {
+      if (cameraCaptureTimerRef.current) {
+        window.clearInterval(cameraCaptureTimerRef.current);
+        cameraCaptureTimerRef.current = null;
+      }
+    };
+  }, [cameraCaptureIntervalMs, captureAndSendCameraFrame, isCameraStreaming]);
 
   const handleImageSelect = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -942,6 +1006,26 @@ export const useGeminiRealtime = ({
   }, [isRecording, startRecording, stopRecording]);
 
   useEffect(() => {
+    const video = cameraVideoRef.current;
+    if (!video) {
+      return;
+    }
+
+    const handleMetadata = () => {
+      updateCameraDimensions();
+    };
+
+    video.addEventListener("loadedmetadata", handleMetadata);
+    video.addEventListener("resize", handleMetadata);
+    handleMetadata();
+
+    return () => {
+      video.removeEventListener("loadedmetadata", handleMetadata);
+      video.removeEventListener("resize", handleMetadata);
+    };
+  }, [updateCameraDimensions]);
+
+  useEffect(() => {
     if (!isGeminiConnected && isCameraStreaming) {
       const message = "Mất kết nối với Gemini. Camera đã tắt.";
       setCameraError(message);
@@ -1080,7 +1164,8 @@ export const useGeminiRealtime = ({
     cameraVideoRef,
     isCameraStreaming,
     toggleCameraStream,
-    cameraError
+    cameraError,
+    cameraDimensions
   };
 };
 

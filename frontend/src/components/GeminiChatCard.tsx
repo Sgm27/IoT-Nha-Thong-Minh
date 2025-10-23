@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, KeyboardEvent } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, type CSSProperties } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +33,7 @@ interface GeminiChatCardProps {
   onChatKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   maxImageSize: number;
   cameraVideoRef: React.RefObject<HTMLVideoElement>;
+  cameraDimensions: { width: number; height: number } | null;
 }
 
 export function GeminiChatCard({
@@ -59,8 +60,13 @@ export function GeminiChatCard({
   onChatSubmit,
   onChatKeyDown,
   maxImageSize,
-  cameraVideoRef
+  cameraVideoRef,
+  cameraDimensions
 }: GeminiChatCardProps) {
+  const aspectRatioStyle: CSSProperties = {
+    aspectRatio: "4 / 3"
+  };
+
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -124,13 +130,14 @@ export function GeminiChatCard({
           </div>
           {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
           <div className="relative mx-auto w-full max-w-md">
-            <div className="relative aspect-video">
+            <div className="relative w-full overflow-hidden" style={aspectRatioStyle}>
               <video
                 ref={cameraVideoRef}
                 className={cn(
-                  "absolute inset-0 h-full w-full rounded-md border bg-black object-contain transition-opacity",
+                  "absolute inset-0 h-full w-full rounded-md border bg-black object-cover transition-opacity",
                   isCameraStreaming ? "opacity-100" : "pointer-events-none opacity-0"
                 )}
+                style={{ transform: "scaleX(-1)" }}
                 autoPlay
                 muted
                 playsInline

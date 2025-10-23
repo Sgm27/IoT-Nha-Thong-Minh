@@ -50,6 +50,7 @@ backend/.env
 backend/.venv/
 backend/__pycache__/
 backend/venv/
+backend/data/images/
 
 # Node.js & Frontend
 node_modules/

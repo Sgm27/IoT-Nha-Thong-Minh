@@ -74,6 +74,7 @@ class GeminiService:
             self.conversation_history_file.write_text("[]", encoding="utf-8")
 
         self._captured_images_dir: Path = settings.captured_images_directory
+        self._capture_interval_seconds: float = settings.capture_interval_seconds
         if settings.save_captured_image:
             self._captured_images_dir.mkdir(parents=True, exist_ok=True)
 
@@ -95,7 +96,15 @@ class GeminiService:
         self._latest_token_usage = self._sanitize_token_usage(
             self.session_service.get_last_token_usage()
         )
-        await self._send_safely(websocket, {"setupComplete": {}})
+        await self._send_safely(
+            websocket,
+            {
+                "setupComplete": {
+                    "cameraCaptureIntervalSeconds": self._capture_interval_seconds,
+                    "cameraCaptureIntervalMs": int(self._capture_interval_seconds * 1000),
+                }
+            },
+        )
 
         if not self.client:
             logger.warning("Google API key is missing. Running in offline echo mode.")
