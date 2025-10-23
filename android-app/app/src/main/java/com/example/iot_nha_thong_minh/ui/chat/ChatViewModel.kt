@@ -144,6 +144,47 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
         }
     }
 
+    fun sendImage(imageData: ByteArray, mimeType: String) {
+        if (imageData.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "Không thể gửi ảnh rỗng") }
+            return
+        }
+
+        val normalizedMime = mimeType.takeIf { it.isNotBlank() } ?: "image/jpeg"
+        val userMessage = ChatMessage(
+            id = nextMessageId++,
+            role = ChatRole.USER,
+            content = "Đã gửi một ảnh",
+            timestampMillis = System.currentTimeMillis(),
+            isStreaming = false,
+            imageData = imageData,
+            imageMimeType = normalizedMime,
+        )
+
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages + userMessage,
+                errorMessage = null,
+            )
+        }
+
+        val sent = repository.sendGeminiImage(imageData, normalizedMime)
+        if (!sent) {
+            _uiState.update {
+                it.copy(errorMessage = "Không thể gửi ảnh tới Gemini. Đang thử kết nối lại...")
+            }
+            scheduleReconnect()
+        }
+    }
+
+    fun showError(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) {
+            return
+        }
+        _uiState.update { it.copy(errorMessage = trimmed) }
+    }
+
     override fun onCleared() {
         super.onCleared()
         repository.disconnectGemini()
