@@ -17,6 +17,7 @@ from google import genai
 from google.genai import types
 
 from app.core.config import settings
+from app.services.fire_detection_service import FireDetectionService
 from app.services.notification_voice_service import NotificationVoiceService
 from app.services.session_service import SessionService
 from app.services.smart_home_service import SmartHomeService, get_smart_home_service
@@ -56,6 +57,7 @@ class GeminiService:
         session_service: Optional[SessionService] = None,
         smart_home_service: Optional[SmartHomeService] = None,
         notification_voice_service: Optional[NotificationVoiceService] = None,
+        fire_detection_service: Optional[FireDetectionService] = None,
         history_file: Optional[Path] = None,
     ) -> None:
         self.client = client
@@ -66,6 +68,9 @@ class GeminiService:
         self.smart_home_service = smart_home_service or get_smart_home_service()
         self.notification_voice_service = (
             notification_voice_service or NotificationVoiceService()
+        )
+        self.fire_detection_service = fire_detection_service or FireDetectionService(
+            notification_voice_service=self.notification_voice_service
         )
 
         self.conversation_history_file: Path = history_file or settings.conversation_history_file
@@ -211,7 +216,9 @@ class GeminiService:
                         if isinstance(media_chunks, list):
                             for chunk in media_chunks:
                                 if isinstance(chunk, dict):
-                                    await self._process_realtime_media_chunk(session, chunk)
+                                    await self._process_realtime_media_chunk(
+                                        websocket, session, chunk
+                                    )
                     continue
 
                 if "text" in data:
@@ -473,7 +480,9 @@ class GeminiService:
         except WebSocketDisconnect:
             logger.info("Ping loop stopped (disconnect)")
 
-    async def _process_realtime_media_chunk(self, session, chunk: Dict[str, Any]) -> None:
+    async def _process_realtime_media_chunk(
+        self, websocket: WebSocket, session, chunk: Dict[str, Any]
+    ) -> None:
         """Decode realtime media payloads from the client and forward them to Gemini."""
 
         mime = chunk.get("mime_type")
@@ -494,9 +503,10 @@ class GeminiService:
         else:
             return
 
+        normalized_mime = mime.lower()
         blob = types.Blob(data=payload_bytes, mime_type=mime)
-        audio_blob = blob if mime.startswith("audio/") else None
-        media_blob = blob if mime.startswith("image/") else None
+        audio_blob = blob if normalized_mime.startswith("audio/") else None
+        media_blob = blob if normalized_mime.startswith("image/") else None
 
         if media_blob and settings.save_captured_image:
             try:
@@ -509,6 +519,24 @@ class GeminiService:
             return
 
         await session.send_realtime_input(audio=audio_blob, media=media_blob)
+
+        if media_blob:
+            await self._maybe_handle_fire_detection(
+                websocket, payload_bytes, normalized_mime
+            )
+
+    async def _maybe_handle_fire_detection(
+        self, websocket: WebSocket, data: bytes, mime: str
+    ) -> None:
+        if not self.fire_detection_service:
+            return
+        try:
+            payload = await self.fire_detection_service.process_image(data, mime)
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("❌ Lỗi khi xử lý phát hiện cháy")
+            return
+        if payload:
+            await self._send_safely(websocket, payload)
 
     def _save_captured_image(self, data: bytes, mime: str) -> None:
         extension = self._infer_extension_from_mime(mime)

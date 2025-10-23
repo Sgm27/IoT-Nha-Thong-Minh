@@ -102,6 +102,14 @@ class Settings:
     capture_interval_seconds: float = field(
         default_factory=lambda: max(0.1, _env_float("CAPTURE_INTERVAL_SECONDS", 0.5))
     )
+    fire_alert_cooldown_seconds: float = field(
+        default_factory=lambda: max(0.0, _env_float("FIRE_ALERT_COOLDOWN_SECONDS", 10.0))
+    )
+    fire_alert_audio_file: Path = field(
+        default_factory=lambda: _env_path(
+            "FIRE_ALERT_AUDIO_FILE", Path("data") / "fire_alert_audio.b64"
+        )
+    )
     default_lights: tuple[tuple[str, bool], ...] = field(
         default_factory=lambda: (
             ("Phòng khách", True),

@@ -12,6 +12,13 @@ data class GeminiRealtimeAudio(
     val sampleRate: Int?,
 )
 
+data class GeminiRealtimeFireDetection(
+    val confidence: Double?,
+    val fireRegions: Int?,
+    val firePercentage: Double?,
+    val totalFireArea: Int?,
+)
+
 sealed class GeminiRealtimeEvent {
     data class Connected(val message: String? = null) : GeminiRealtimeEvent()
     data class Disconnected(val reason: String? = null) : GeminiRealtimeEvent()
@@ -34,5 +41,12 @@ sealed class GeminiRealtimeEvent {
         val status: String?,
         val requestedTitle: String?,
         val matchedSong: String?,
+    ) : GeminiRealtimeEvent()
+    data class FireAlert(
+        val message: String,
+        val detection: GeminiRealtimeFireDetection?,
+        val audio: GeminiRealtimeAudio?,
+        val triggeredAt: String?,
+        val sourceMimeType: String?,
     ) : GeminiRealtimeEvent()
 }
