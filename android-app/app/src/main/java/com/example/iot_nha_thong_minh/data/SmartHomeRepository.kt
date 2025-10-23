@@ -109,4 +109,7 @@ class SmartHomeRepository(
 
     fun sendGeminiRealtimeAudio(data: ByteArray, sampleRate: Int): Boolean =
         geminiClient.sendRealtimeAudio(data, sampleRate)
+
+    fun sendGeminiImage(imageData: ByteArray, mimeType: String): Boolean =
+        geminiClient.sendRealtimeImage(imageData, mimeType)
 }

@@ -13,6 +13,8 @@ data class ChatMessage(
     val content: String,
     val timestampMillis: Long,
     val isStreaming: Boolean = false,
+    val imageData: ByteArray? = null,
+    val imageMimeType: String? = null,
 )
 
 enum class PlaybackStatus { PLAYING, PAUSED, STOPPED }

@@ -97,16 +97,26 @@ class GeminiWebSocketClient(
     }
 
     fun sendRealtimeAudio(data: ByteArray, sampleRate: Int): Boolean {
+        val mimeSampleRate = if (sampleRate > 0) sampleRate else DEFAULT_AUDIO_SAMPLE_RATE
+        return sendRealtimeMediaChunk(data, "audio/pcm;rate=$mimeSampleRate")
+    }
+
+    fun sendRealtimeImage(data: ByteArray, mimeType: String): Boolean {
+        val normalizedMime = mimeType.takeIf { it.isNotBlank() } ?: "image/jpeg"
+        return sendRealtimeMediaChunk(data, normalizedMime)
+    }
+
+    private fun sendRealtimeMediaChunk(data: ByteArray, mimeType: String): Boolean {
         if (data.isEmpty()) {
             return false
         }
         val encoded = try {
             Base64.encodeToString(data, Base64.NO_WRAP)
         } catch (error: IllegalArgumentException) {
-            Log.e("GeminiWebSocket", "Không thể mã hóa dữ liệu âm thanh", error)
+            Log.e("GeminiWebSocket", "Không thể mã hóa dữ liệu media", error)
             return false
         }
-        val mimeSampleRate = if (sampleRate > 0) sampleRate else DEFAULT_AUDIO_SAMPLE_RATE
+        val safeMimeType = mimeType.takeIf { it.isNotBlank() } ?: "application/octet-stream"
         val payload = buildJsonObject {
             put(
                 "realtime_input",
@@ -116,7 +126,7 @@ class GeminiWebSocketClient(
                         buildJsonArray {
                             add(
                                 buildJsonObject {
-                                    put("mime_type", "audio/pcm;rate=$mimeSampleRate")
+                                    put("mime_type", safeMimeType)
                                     put("data", encoded)
                                 },
                             )
