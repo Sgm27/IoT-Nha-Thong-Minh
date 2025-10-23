@@ -230,6 +230,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
         if (text.isBlank()) {
             if (finished) {
                 streamingAssistantMessageId = null
+                onAssistantSpeechFinished()
             }
             return
         }
