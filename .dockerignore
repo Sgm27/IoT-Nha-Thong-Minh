@@ -1,0 +1,29 @@
+# Ignore Python cache and virtual environments
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info
+.eggs
+.venv
+venv
+ENV/
+
+# Node.js artifacts
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+**/.env
+
+# OS / editor files
+.DS_Store
+.idea
+.vscode
+
+# Temporary files
+*.log
