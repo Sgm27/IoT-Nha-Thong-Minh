@@ -548,5 +548,125 @@
     "role": "assistant",
     "text": "Bạn có muốn nghe thêm câu chuyện cười nào nữa không?",
     "timestamp": "2025-10-23T03:32:55.394508"
+  },
+  {
+    "role": "user",
+    "text": "Alo gặp rồi.",
+    "timestamp": "2025-11-06T10:29:48.319480"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn ạ?",
+    "timestamp": "2025-11-06T10:29:48.331743"
+  },
+  {
+    "role": "user",
+    "text": "Tắt đèn ban công.",
+    "timestamp": "2025-11-06T10:29:56.666596"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tắt đèn ban công cho bạn rồi ạ.",
+    "timestamp": "2025-11-06T10:29:56.681453"
+  },
+  {
+    "role": "user",
+    "text": "Tất điện nha tầm",
+    "timestamp": "2025-11-06T10:30:03.069379"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn tắt đèn ở vị trí nào trong nhà tắm ạ?",
+    "timestamp": "2025-11-06T10:30:03.083072"
+  },
+  {
+    "role": "user",
+    "text": "Tắt tiền cho tập mình.",
+    "timestamp": "2025-11-06T10:30:14.907323"
+  },
+  {
+    "role": "assistant",
+    "text": "Xin lỗi, tôi vẫn chưa rõ bạn muốn tắt đèn ở đâu. Bạn có thể nói rõ hơn là \"nhà tắm\" hay một vị trí cụ thể nào khác không ạ?",
+    "timestamp": "2025-11-06T10:30:14.923815"
+  },
+  {
+    "role": "user",
+    "text": "tắt đèn phóng thôi.",
+    "timestamp": "2025-11-06T10:30:21.880613"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tắt đèn phòng khách cho bạn rồi ạ.",
+    "timestamp": "2025-11-06T10:30:21.895910"
+  },
+  {
+    "role": "user",
+    "text": "Bật BH người đầu tiên.",
+    "timestamp": "2025-11-06T10:30:30.997329"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Người Đầu Tiên\" cho bạn rồi ạ.",
+    "timestamp": "2025-11-06T10:30:31.012594"
+  },
+  {
+    "role": "user",
+    "text": "Hello, good evening.",
+    "timestamp": "2025-11-06T10:51:52.974864"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào buổi tối, tôi có thể giúp gì cho bạn ạ?",
+    "timestamp": "2025-11-06T10:51:52.998778"
+  },
+  {
+    "role": "user",
+    "text": "Bật tiền băng công nhé.",
+    "timestamp": "2025-11-06T10:51:58.791347"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ban công đã được bật rồi ạ.",
+    "timestamp": "2025-11-06T10:51:58.811339"
+  },
+  {
+    "role": "user",
+    "text": "Bật cho tôi bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-11-06T10:52:10.651017"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Người Như Anh Xứng Đáng Cô Đơn\" rồi ạ. Chúc bạn nghe nhạc vui vẻ.",
+    "timestamp": "2025-11-06T10:52:10.668237"
+  },
+  {
+    "role": "user",
+    "text": "Bật cho tôi bản hết trơn.",
+    "timestamp": "2025-11-06T10:55:04.262810"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn bật bài hát gì ạ? Bạn có thể nói rõ tên bài hát giúp tôi được không?",
+    "timestamp": "2025-11-06T10:55:04.279505"
+  },
+  {
+    "role": "user",
+    "text": "màu",
+    "timestamp": "2025-11-06T10:55:11.345789"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có thể nói rõ tên bài hát hoặc ca sĩ để tôi tìm chính xác hơn không?",
+    "timestamp": "2025-11-06T10:55:11.363712"
+  },
+  {
+    "role": "user",
+    "text": "Nơi này có anh",
+    "timestamp": "2025-11-06T10:55:19.291155"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Nơi Này Có Anh\" rồi ạ.",
+    "timestamp": "2025-11-06T10:55:19.307424"
   }
 ]
