@@ -378,5 +378,175 @@
     "role": "user",
     "text": "nó sẽ gồm cái gì ở đây? Hôm nay miêu tả gì ạ?",
     "timestamp": "2025-10-23T01:19:54.280306"
+  },
+  {
+    "role": "user",
+    "text": "Hãy tắt điện nhà bếp cho tôi.",
+    "timestamp": "2025-10-23T03:15:52.087564"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn nhà bếp đã được tắt. Bạn cần tôi giúp gì khác không?",
+    "timestamp": "2025-10-23T03:15:52.103251"
+  },
+  {
+    "role": "user",
+    "text": "Được rồi. Bật điện nhà bếp.",
+    "timestamp": "2025-10-23T03:16:09.012470"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn nhà bếp đã được bật. Bạn có yêu cầu gì khác không?",
+    "timestamp": "2025-10-23T03:16:09.033955"
+  },
+  {
+    "role": "user",
+    "text": "Phát bài hát không đau nữa rồi.",
+    "timestamp": "2025-10-23T03:16:21.598059"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã phát bài \"Không Đau Nữa Rồi\". Bạn có muốn nghe bài nào khác không?",
+    "timestamp": "2025-10-23T03:16:21.613798"
+  },
+  {
+    "role": "user",
+    "text": ". Nghe chưa?",
+    "timestamp": "2025-10-23T03:16:33.498686"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có thể nhắc lại yêu cầu của mình được không? Tôi chưa hiểu rõ lắm.",
+    "timestamp": "2025-10-23T03:16:33.518868"
+  },
+  {
+    "role": "user",
+    "text": "Hãy mô tả người đang ăn rồi.",
+    "timestamp": "2025-10-23T03:17:07.567933"
+  },
+  {
+    "role": "assistant",
+    "text": "Trong hình là một cô gái trẻ với mái tóc đen dài, được buộc gọn gàng.",
+    "timestamp": "2025-10-23T03:17:07.583371"
+  },
+  {
+    "role": "user",
+    "text": ". Bạn ấy đang có sinh không?",
+    "timestamp": "2025-10-23T03:17:19.592205"
+  },
+  {
+    "role": "assistant",
+    "text": "Vẻ đẹp là cảm nhận chủ quan của mỗi người, tôi không thể đưa ra đánh giá về điều đó.",
+    "timestamp": "2025-10-23T03:17:19.610690"
+  },
+  {
+    "role": "user",
+    "text": "Hello, bạn nhớ tới.",
+    "timestamp": "2025-10-23T03:28:26.204759"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay ạ?",
+    "timestamp": "2025-10-23T03:28:26.220635"
+  },
+  {
+    "role": "user",
+    "text": "Đất đèn ở ban công nhỉ.",
+    "timestamp": "2025-10-23T03:28:33.645455"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ở ban công đã được tắt rồi ạ.",
+    "timestamp": "2025-10-23T03:28:33.666886"
+  },
+  {
+    "role": "user",
+    "text": "Bật đèn ở ban công đi.",
+    "timestamp": "2025-10-23T03:28:40.125722"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn ở ban công đã được bật rồi ạ.",
+    "timestamp": "2025-10-23T03:28:40.144658"
+  },
+  {
+    "role": "user",
+    "text": "trong Nó đã được thì nó cũng",
+    "timestamp": "2025-10-23T03:28:56.225617"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn tôi giúp gì với đèn ở ban công nữa không ạ?",
+    "timestamp": "2025-10-23T03:28:56.246340"
+  },
+  {
+    "role": "user",
+    "text": "đang có nhiều mà cái bơm đấy nó mà nó không có cháy nó không có mở được.",
+    "timestamp": "2025-10-23T03:29:11.160915"
+  },
+  {
+    "role": "assistant",
+    "text": "Xin lỗi, tôi chưa hiểu rõ yêu cầu của bạn. Bạn có thể nói rõ hơn về \"bơm\" và \"cháy\" không ạ?",
+    "timestamp": "2025-10-23T03:29:11.177537"
+  },
+  {
+    "role": "user",
+    "text": "Hello hello hello hello hello hello hello",
+    "timestamp": "2025-10-23T03:32:24.274209"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi đây. Bạn có yêu",
+    "timestamp": "2025-10-23T03:32:24.287982"
+  },
+  {
+    "role": "user",
+    "text": "Nghe rõ không vậy?",
+    "timestamp": "2025-10-23T03:32:26.425132"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi nghe rõ. Bạn có yêu cầu gì không ạ?",
+    "timestamp": "2025-10-23T03:32:26.438131"
+  },
+  {
+    "role": "user",
+    "text": "Chào bạn. Tôi đây, nghe tôi rõ. Bạn có yêu cầu gì không ạ?",
+    "timestamp": "2025-10-23T03:32:34.003514"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi nghe rõ ạ. Bạn có yêu cầu gì không ạ?",
+    "timestamp": "2025-10-23T03:32:34.016441"
+  },
+  {
+    "role": "user",
+    "text": "K một câu chuyện cười đấy.",
+    "timestamp": "2025-10-23T03:32:40.157461"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có muốn tôi kể một câu chuyện cười không?",
+    "timestamp": "2025-10-23T03:32:40.170069"
+  },
+  {
+    "role": "user",
+    "text": "Có kể câu chuyện cư nhiên.",
+    "timestamp": "2025-10-23T03:32:48.009951"
+  },
+  {
+    "role": "assistant",
+    "text": "Tại sao cá không bao giờ chơi bóng rổ? Vì chúng sợ bị ném vào rổ.",
+    "timestamp": "2025-10-23T03:32:48.022954"
+  },
+  {
+    "role": "user",
+    "text": "Hải hước quá.",
+    "timestamp": "2025-10-23T03:32:55.382549"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có muốn nghe thêm câu chuyện cười nào nữa không?",
+    "timestamp": "2025-10-23T03:32:55.394508"
   }
 ]
