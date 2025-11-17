@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (không cần trong image)
+README.md
+HARDWARE.md
+*.md
+
+# Scripts (không cần trong image)
+scripts/
+
+# Config files - sẽ mount từ volume
+config/.env
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

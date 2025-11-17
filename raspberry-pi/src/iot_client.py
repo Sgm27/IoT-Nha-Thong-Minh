@@ -9,7 +9,7 @@ import signal
 import sys
 from typing import Dict
 
-from gpio_controller import GPIOController, RelayConfig
+from gpio_devices import GPIODevicesController, GPIODeviceConfig, DeviceType
 from camera_service import CameraService, CameraConfig
 from audio_handler import AudioHandler, AudioConfig
 from websocket_client import WebSocketClient, WebSocketConfig
@@ -31,7 +31,7 @@ class IoTClient:
 
     def __init__(
         self,
-        gpio_configs: Dict[str, RelayConfig],
+        gpio_configs: Dict[str, GPIODeviceConfig],
         camera_config: CameraConfig,
         audio_config: AudioConfig,
         websocket_config: WebSocketConfig,
@@ -39,7 +39,7 @@ class IoTClient:
     ):
         """
         Args:
-            gpio_configs: Dict của relay configs
+            gpio_configs: Dict của GPIO device configs
             camera_config: Camera configuration
             audio_config: Audio configuration
             websocket_config: WebSocket configuration
@@ -48,7 +48,7 @@ class IoTClient:
         self.mock_mode = mock_mode
 
         # Initialize components
-        self.gpio = GPIOController(gpio_configs, mock_mode=mock_mode)
+        self.gpio = GPIODevicesController(gpio_configs, mock_mode=mock_mode)
         self.camera = CameraService(camera_config, mock_mode=mock_mode)
         self.audio = AudioHandler(audio_config, mock_mode=mock_mode)
         self.websocket = WebSocketClient(websocket_config)
@@ -80,14 +80,32 @@ class IoTClient:
 
         self.audio.set_audio_callback(on_audio_chunk)
 
-        # WebSocket light update → GPIO
+        # WebSocket light/device update → GPIO
         def on_light_update(location: str, is_on: bool):
-            """Callback khi nhận lệnh cập nhật đèn từ server"""
-            logger.info(f"Nhận lệnh: {'Bật' if is_on else 'Tắt'} đèn '{location}'")
+            """Callback khi nhận lệnh cập nhật đèn/device từ server"""
+            logger.info(f"Nhận lệnh: {'Bật' if is_on else 'Tắt'} '{location}'")
+
+            # Tự động phát hiện device type và điều khiển
+            device_key = location.lower().strip()
+
+            # Thử các loại device
             if is_on:
-                self.gpio.turn_on(location)
+                # Try LED first
+                if self.gpio.led_on(location):
+                    return
+                # Try relay
+                if self.gpio.relay_on(location):
+                    return
+                # Try buzzer
+                if self.gpio.buzzer_on(location):
+                    return
             else:
-                self.gpio.turn_off(location)
+                if self.gpio.led_off(location):
+                    return
+                if self.gpio.relay_off(location):
+                    return
+                if self.gpio.buzzer_off(location):
+                    return
 
         self.websocket.set_light_update_callback(on_light_update)
 
@@ -216,12 +234,49 @@ async def main():
     # Load config (có thể load từ file .env hoặc config.json)
     # Ví dụ đơn giản:
 
-    # GPIO configs - Map locations to GPIO pins
+    # GPIO configs - Cấu hình các thiết bị GPIO
+    # Thay đổi theo thiết bị thực tế của bạn!
     gpio_configs = {
-        "Phòng khách": RelayConfig(gpio_pin=17, location="Phòng khách", active_high=False),
-        "Phòng ngủ": RelayConfig(gpio_pin=27, location="Phòng ngủ", active_high=False),
-        "Nhà bếp": RelayConfig(gpio_pin=22, location="Nhà bếp", active_high=False),
-        "Ban công": RelayConfig(gpio_pin=23, location="Ban công", active_high=False),
+        # LEDs
+        "LED Đỏ": GPIODeviceConfig(
+            gpio_pin=17,
+            name="LED Đỏ",
+            device_type=DeviceType.LED,
+            active_high=True
+        ),
+        "LED Xanh": GPIODeviceConfig(
+            gpio_pin=27,
+            name="LED Xanh",
+            device_type=DeviceType.LED,
+            active_high=True
+        ),
+        "LED Vàng": GPIODeviceConfig(
+            gpio_pin=22,
+            name="LED Vàng",
+            device_type=DeviceType.LED,
+            active_high=True
+        ),
+        # Buzzer
+        "Buzzer": GPIODeviceConfig(
+            gpio_pin=23,
+            name="Buzzer Cảnh báo",
+            device_type=DeviceType.BUZZER,
+            active_high=True
+        ),
+        # Servo (nếu có)
+        "Servo Cửa": GPIODeviceConfig(
+            gpio_pin=18,  # GPIO 18 hỗ trợ hardware PWM
+            name="Servo Cửa",
+            device_type=DeviceType.SERVO,
+        ),
+
+        # Comment out các devices bạn chưa có:
+        # "Relay 1": GPIODeviceConfig(
+        #     gpio_pin=24,
+        #     name="Relay Đèn",
+        #     device_type=DeviceType.RELAY,
+        #     active_high=False  # Relay thường active LOW
+        # ),
     }
 
     # Camera config

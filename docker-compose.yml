@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build:
@@ -25,3 +23,50 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  # Raspberry Pi IoT Client
+  # CẢNH BÁO: Service này CHỈ chạy trên Raspberry Pi!
+  # Trên Mac/Windows, dùng mock mode hoặc comment service này
+  raspberry-pi:
+    build:
+      context: ./raspberry-pi
+      dockerfile: Dockerfile
+    container_name: iot-raspberry-pi-client
+    restart: unless-stopped
+
+    # Uncomment các dòng sau khi chạy trên Raspberry Pi thật:
+    # privileged: true
+    # network_mode: host
+    # devices:
+    #   - /dev/gpiomem:/dev/gpiomem
+    #   - /dev/gpiochip0:/dev/gpiochip0
+    #   - /dev/gpiochip4:/dev/gpiochip4
+    #   - /dev/video0:/dev/video0
+    #   - /dev/snd:/dev/snd
+
+    volumes:
+      - ./raspberry-pi/config/.env:/app/config/.env:rw
+      - raspberry-pi-logs:/var/log
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Mock mode - set to "false" khi chạy trên Pi thật với hardware
+      - MOCK_MODE=true
+      # Backend URL - sẽ connect tới backend service
+      - BACKEND_URL=ws://backend:8000/ws/gemini
+
+    depends_on:
+      - backend
+
+    # Comment dòng này khi uncomment network_mode: host
+    networks:
+      - default
+
+    # Profiles để control service
+    # Chạy: docker-compose --profile raspberry-pi up
+    profiles:
+      - raspberry-pi
+
+volumes:
+  raspberry-pi-logs:
+    driver: local

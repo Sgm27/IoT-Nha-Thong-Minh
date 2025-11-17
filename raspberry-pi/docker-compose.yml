@@ -1,0 +1,69 @@
+services:
+  iot-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iot-smart-home-client
+    restart: unless-stopped
+
+    # Privileged mode để access GPIO và hardware devices
+    # CẢNH BÁO: Giảm security, chỉ dùng trên Pi của bạn
+    privileged: true
+
+    # Network mode host để WebSocket hoạt động tốt
+    network_mode: host
+
+    # Device mappings
+    devices:
+      # GPIO access (Raspberry Pi 5)
+      - /dev/gpiomem:/dev/gpiomem
+      - /dev/gpiochip0:/dev/gpiochip0
+      - /dev/gpiochip4:/dev/gpiochip4  # Pi 5 có 2 GPIO chips
+
+      # Camera (USB webcam)
+      # Thêm các video devices bạn cần
+      - /dev/video0:/dev/video0
+      # - /dev/video1:/dev/video1  # Uncomment nếu cần
+
+      # Audio devices
+      - /dev/snd:/dev/snd  # ALSA sound devices
+
+    # Volume mappings
+    volumes:
+      # Config file (read-write)
+      - ./config/.env:/app/config/.env:rw
+
+      # Logs (persistent)
+      - iot-logs:/var/log
+
+      # Optional: Mount code để dev (comment out khi production)
+      # - ./src:/app/src:ro
+
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Mock mode - override bằng MOCK_MODE=true docker-compose up
+      - MOCK_MODE=${MOCK_MODE:-false}
+      # Backend URL
+      - BACKEND_URL=${BACKEND_URL:-ws://localhost:8000/ws/gemini}
+
+    # Load thêm env từ file (nếu cần)
+    # env_file:
+    #   - ./config/.env
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Security options (khi không dùng privileged)
+    # cap_add:
+    #   - SYS_RAWIO  # For GPIO access
+    # security_opt:
+    #   - apparmor=unconfined
+
+volumes:
+  iot-logs:
+    driver: local

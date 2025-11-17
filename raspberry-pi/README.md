@@ -49,6 +49,53 @@ Module relay kết nối với Raspberry Pi GPIO (BCM numbering):
 
 ## Cài đặt
 
+Có 2 cách cài đặt:
+1. **Docker** (Khuyến nghị) - Dễ deploy, portable
+2. **Native** - Performance tốt hơn, dễ debug
+
+### Option 1: Docker Setup (Khuyến nghị)
+
+**Xem hướng dẫn chi tiết tại [DOCKER.md](DOCKER.md)**
+
+Quick start:
+
+```bash
+# 1. Cài Docker (nếu chưa có)
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+# Logout/login lại
+
+# 2. Clone repo
+cd /home/pi
+git clone <repo-url> IoT-Nha-Thong-Minh
+cd IoT-Nha-Thong-Minh/raspberry-pi
+
+# 3. Cấu hình
+cp config/.env.example config/.env
+nano config/.env  # Đổi BACKEND_URL
+
+# 4. Build và chạy
+./scripts/docker-build.sh
+./scripts/docker-run.sh
+
+# 5. Xem logs
+docker-compose logs -f
+```
+
+**Mock mode** (test không cần hardware):
+```bash
+./scripts/docker-mock.sh
+```
+
+✅ **Ưu điểm Docker:**
+- Dễ deploy, không lo dependencies
+- Auto-restart khi crash hoặc reboot
+- Portable - chạy trên bất kỳ Pi nào
+- GPIO, camera, audio đều hoạt động!
+
+### Option 2: Native Setup
+
 ### 1. Clone repository
 
 ```bash
