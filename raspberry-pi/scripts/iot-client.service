@@ -1,0 +1,23 @@
+[Unit]
+Description=IoT Smart Home Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/IoT-Nha-Thong-Minh/raspberry-pi
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/pi/IoT-Nha-Thong-Minh/raspberry-pi/.venv/bin/python3 /home/pi/IoT-Nha-Thong-Minh/raspberry-pi/src/iot_client.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

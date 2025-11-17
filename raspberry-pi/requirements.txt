@@ -1,0 +1,19 @@
+# IoT Client requirements cho Raspberry Pi 5
+
+# GPIO control
+gpiozero>=2.0.1
+
+# Camera (USB webcam)
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Audio I/O
+pyaudio>=0.2.13
+
+# WebSocket client
+websockets>=12.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Utilities
