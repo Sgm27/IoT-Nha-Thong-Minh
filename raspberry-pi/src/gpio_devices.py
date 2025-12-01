@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 try:
-    from gpiozero import OutputDevice, LED, Buzzer, Servo, PWMOutputDevice
+    from gpiozero import OutputDevice, LED, Buzzer, Servo, PWMOutputDevice, Motor
     GPIO_AVAILABLE = True
 except ImportError:
     GPIO_AVAILABLE = False
@@ -26,12 +26,13 @@ class DeviceType(Enum):
     SERVO = "servo"
     RELAY = "relay"
     PWM = "pwm"
+    MOTOR = "motor"
 
 
 @dataclass
 class GPIODeviceConfig:
     """Cấu hình cho một GPIO device"""
-    gpio_pin: int
+    gpio_pin: Union[int, tuple]  # int for single pin, tuple (forward, backward, enable) for motor
     name: str
     device_type: DeviceType
     active_high: bool = True  # LED, Buzzer thường active HIGH, Relay thường active LOW
@@ -43,6 +44,9 @@ class GPIODeviceConfig:
 
     # PWM specific
     frequency: int = 1000  # Hz
+
+    # Motor specific (for L298N driver)
+    # gpio_pin should be tuple: (forward_pin, backward_pin, enable_pin)
 
 
 class GPIODevicesController:
@@ -116,6 +120,19 @@ class GPIODevicesController:
 
         elif config.device_type == DeviceType.PWM:
             return PWMOutputDevice(config.gpio_pin, frequency=config.frequency, initial_value=0)
+
+        elif config.device_type == DeviceType.MOTOR:
+            # Motor requires 3 pins: (forward, backward, enable)
+            if isinstance(config.gpio_pin, tuple) and len(config.gpio_pin) == 3:
+                forward_pin, backward_pin, enable_pin = config.gpio_pin
+                return Motor(
+                    forward=forward_pin,
+                    backward=backward_pin,
+                    enable=enable_pin
+                )
+            else:
+                logger.error(f"Motor '{config.name}' cần 3 pins (forward, backward, enable)")
+                return None
 
         else:
             # Default: OutputDevice
@@ -241,6 +258,107 @@ class GPIODevicesController:
         """Tắt relay"""
         return self._turn_off(name, DeviceType.RELAY)
 
+    # ===== Motor Methods =====
+
+    def motor_forward(self, name: str, speed: float = 1.0) -> bool:
+        """
+        Chạy motor tiến
+
+        Args:
+            name: Device name
+            speed: Tốc độ từ 0.0 - 1.0 (0% - 100%)
+        """
+        device_key = name.lower().strip()
+
+        if device_key not in self.devices:
+            logger.warning(f"Không tìm thấy motor: '{name}'")
+            return False
+
+        # Clamp speed 0-1
+        speed = max(0.0, min(1.0, speed))
+
+        if self.mock_mode:
+            logger.info(f"[MOCK] Motor '{name}' chạy tiến {speed*100:.0f}%")
+            self._states[device_key] = ("forward", speed)
+            return True
+
+        device = self.devices[device_key]
+        if device is None or not isinstance(device, Motor):
+            logger.warning(f"Device '{name}' không phải motor")
+            return False
+
+        try:
+            device.forward(speed=speed)
+            self._states[device_key] = ("forward", speed)
+            logger.info(f"Motor '{name}' chạy tiến {speed*100:.0f}%")
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi điều khiển motor '{name}': {e}")
+            return False
+
+    def motor_backward(self, name: str, speed: float = 1.0) -> bool:
+        """
+        Chạy motor lùi
+
+        Args:
+            name: Device name
+            speed: Tốc độ từ 0.0 - 1.0 (0% - 100%)
+        """
+        device_key = name.lower().strip()
+
+        if device_key not in self.devices:
+            logger.warning(f"Không tìm thấy motor: '{name}'")
+            return False
+
+        # Clamp speed 0-1
+        speed = max(0.0, min(1.0, speed))
+
+        if self.mock_mode:
+            logger.info(f"[MOCK] Motor '{name}' chạy lùi {speed*100:.0f}%")
+            self._states[device_key] = ("backward", speed)
+            return True
+
+        device = self.devices[device_key]
+        if device is None or not isinstance(device, Motor):
+            logger.warning(f"Device '{name}' không phải motor")
+            return False
+
+        try:
+            device.backward(speed=speed)
+            self._states[device_key] = ("backward", speed)
+            logger.info(f"Motor '{name}' chạy lùi {speed*100:.0f}%")
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi điều khiển motor '{name}': {e}")
+            return False
+
+    def motor_stop(self, name: str) -> bool:
+        """Dừng motor"""
+        device_key = name.lower().strip()
+
+        if device_key not in self.devices:
+            logger.warning(f"Không tìm thấy motor: '{name}'")
+            return False
+
+        if self.mock_mode:
+            logger.info(f"[MOCK] Motor '{name}' dừng")
+            self._states[device_key] = ("stop", 0)
+            return True
+
+        device = self.devices[device_key]
+        if device is None or not isinstance(device, Motor):
+            logger.warning(f"Device '{name}' không phải motor")
+            return False
+
+        try:
+            device.stop()
+            self._states[device_key] = ("stop", 0)
+            logger.info(f"Motor '{name}' dừng")
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi dừng motor '{name}': {e}")
+            return False
+
     # ===== PWM Methods =====
 
     def pwm_set_duty_cycle(self, name: str, duty_cycle: float) -> bool:
@@ -355,6 +473,8 @@ class GPIODevicesController:
                         device.mid()  # Center servo
                     elif isinstance(device, PWMOutputDevice):
                         device.value = 0
+                    elif isinstance(device, Motor):
+                        device.stop()
                     else:
                         device.off()
 

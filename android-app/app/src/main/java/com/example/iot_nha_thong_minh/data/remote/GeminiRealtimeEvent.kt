@@ -49,4 +49,10 @@ sealed class GeminiRealtimeEvent {
         val triggeredAt: String?,
         val sourceMimeType: String?,
     ) : GeminiRealtimeEvent()
+
+    data class MotorControl(
+        val name: String,
+        val action: String,
+        val speed: Float,
+    ) : GeminiRealtimeEvent()
 }

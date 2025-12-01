@@ -101,6 +101,27 @@ class AudioHandler:
         except Exception as e:
             logger.warning(f"Không thể liệt kê audio devices: {e}")
 
+    def _has_output_device(self) -> bool:
+        """
+        Kiểm tra xem có output device (speaker) không
+
+        Returns:
+            True nếu có ít nhất 1 output device
+        """
+        if self.audio is None:
+            return False
+
+        try:
+            device_count = self.audio.get_device_count()
+            for i in range(device_count):
+                info = self.audio.get_device_info_by_index(i)
+                if info['maxOutputChannels'] > 0:
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Lỗi khi kiểm tra output device: {e}")
+            return False
+
     def set_audio_callback(self, callback: Callable[[str], None]) -> None:
         """
         Đăng ký callback để nhận audio chunks từ microphone
@@ -222,6 +243,15 @@ class AudioHandler:
             return True
 
         try:
+            # Kiểm tra xem có output device không
+            if not self._has_output_device():
+                logger.warning("⚠️  Không tìm thấy output audio device (speaker)")
+                logger.warning("⚠️  Playback sẽ bị tắt - hệ thống vẫn hoạt động bình thường")
+                # Chạy ở chế độ mock để không block các tính năng khác
+                self.mock_mode = True
+                self.playing = True
+                return True
+
             # Mở output stream
             self.playback_stream = self.audio.open(
                 format=self.config.format,
@@ -247,7 +277,11 @@ class AudioHandler:
 
         except Exception as e:
             logger.error(f"Lỗi khi bắt đầu playback: {e}")
-            return False
+            logger.warning("⚠️  Playback sẽ bị tắt - hệ thống vẫn hoạt động bình thường")
+            # Fallback to mock mode
+            self.mock_mode = True
+            self.playing = True
+            return True
 
     def stop_playback(self) -> None:
         """Dừng playback"""

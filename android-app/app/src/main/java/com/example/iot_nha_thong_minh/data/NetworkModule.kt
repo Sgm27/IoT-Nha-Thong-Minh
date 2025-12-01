@@ -1,5 +1,7 @@
 package com.example.iot_nha_thong_minh.data
 
+import android.content.Context
+import com.example.iot_nha_thong_minh.data.local.ChatDatabase
 import com.example.iot_nha_thong_minh.data.remote.SmartHomeApi
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -35,7 +37,22 @@ object NetworkModule {
 
     val api: SmartHomeApi = retrofit.create(SmartHomeApi::class.java)
 
+    private var database: ChatDatabase? = null
+
+    fun initialize(context: Context) {
+        if (database == null) {
+            database = ChatDatabase.getInstance(context)
+        }
+    }
+
     val repository: SmartHomeRepository by lazy {
-        SmartHomeRepository(api, okHttpClient, json)
+        val db = database
+        SmartHomeRepository(
+            api = api,
+            okHttpClient = okHttpClient,
+            json = json,
+            chatMessageDao = db?.chatMessageDao(),
+            fireAlertDao = db?.fireAlertDao(),
+        )
     }
 }

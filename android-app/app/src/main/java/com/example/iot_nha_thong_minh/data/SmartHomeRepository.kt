@@ -1,6 +1,12 @@
 package com.example.iot_nha_thong_minh.data
 
 import android.util.Log
+import com.example.iot_nha_thong_minh.data.local.ChatMessageDao
+import com.example.iot_nha_thong_minh.data.local.ChatMessageEntity
+import com.example.iot_nha_thong_minh.data.local.FireAlertDao
+import com.example.iot_nha_thong_minh.data.local.FireAlertEntity
+import com.example.iot_nha_thong_minh.data.model.ChatMessage
+import com.example.iot_nha_thong_minh.data.model.FireAlert
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeEvent
 import com.example.iot_nha_thong_minh.data.remote.GeminiWebSocketClient
 import com.example.iot_nha_thong_minh.data.remote.LightDto
@@ -16,6 +22,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -26,6 +33,8 @@ class SmartHomeRepository(
     private val api: SmartHomeApi,
     private val okHttpClient: OkHttpClient,
     private val json: Json,
+    private val chatMessageDao: ChatMessageDao? = null,
+    private val fireAlertDao: FireAlertDao? = null,
 ) {
     private val geminiClient = GeminiWebSocketClient(okHttpClient, json)
 
@@ -112,4 +121,45 @@ class SmartHomeRepository(
 
     fun sendGeminiImage(imageData: ByteArray, mimeType: String): Boolean =
         geminiClient.sendRealtimeImage(imageData, mimeType)
+
+    // Chat message persistence
+    fun observeChatMessages(limit: Int = 100): Flow<List<ChatMessage>>? =
+        chatMessageDao?.getRecentMessages(limit)?.map { entities ->
+            entities.map { it.toDomain() }.reversed()
+        }
+
+    suspend fun saveChatMessage(message: ChatMessage): Long? =
+        chatMessageDao?.insertMessage(ChatMessageEntity.fromDomain(message))
+
+    suspend fun saveChatMessages(messages: List<ChatMessage>) {
+        chatMessageDao?.insertMessages(messages.map { ChatMessageEntity.fromDomain(it) })
+    }
+
+    suspend fun clearChatHistory() {
+        chatMessageDao?.clearAllMessages()
+    }
+
+    // Fire alert persistence
+    fun observeFireAlerts(limit: Int = 100): Flow<List<FireAlert>>? =
+        fireAlertDao?.getRecentAlerts(limit)?.map { entities ->
+            entities.map { it.toDomain() }
+        }
+
+    fun observeUnacknowledgedCount(): Flow<Int>? =
+        fireAlertDao?.getUnacknowledgedCount()
+
+    suspend fun saveFireAlert(alert: FireAlert): Long? =
+        fireAlertDao?.insertAlert(FireAlertEntity.fromDomain(alert))
+
+    suspend fun acknowledgeFireAlert(alertId: Long) {
+        fireAlertDao?.acknowledgeAlert(alertId)
+    }
+
+    suspend fun acknowledgeAllFireAlerts() {
+        fireAlertDao?.acknowledgeAllAlerts()
+    }
+
+    suspend fun clearFireAlertHistory() {
+        fireAlertDao?.clearAllAlerts()
+    }
 }

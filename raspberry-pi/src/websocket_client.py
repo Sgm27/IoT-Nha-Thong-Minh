@@ -44,6 +44,7 @@ class WebSocketClient:
         self.on_light_update: Optional[Callable[[str, bool], None]] = None
         self.on_audio_response: Optional[Callable[[str, int], None]] = None
         self.on_fire_alert: Optional[Callable[[str, str], None]] = None
+        self.on_motor_control: Optional[Callable[[str, str, float], None]] = None
         self.on_message: Optional[Callable[[Dict[str, Any]], None]] = None
 
     def set_light_update_callback(self, callback: Callable[[str, bool], None]) -> None:
@@ -57,6 +58,10 @@ class WebSocketClient:
     def set_fire_alert_callback(self, callback: Callable[[str, str], None]) -> None:
         """Callback khi nhận cảnh báo cháy (message, audio_b64)"""
         self.on_fire_alert = callback
+
+    def set_motor_control_callback(self, callback: Callable[[str, str, float], None]) -> None:
+        """Callback khi nhận lệnh điều khiển motor (name, action, speed)"""
+        self.on_motor_control = callback
 
     def set_message_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
         """Callback cho tất cả messages"""
@@ -270,6 +275,14 @@ class WebSocketClient:
                 audio_b64 = message.get("audio_base64", "")
                 if self.on_fire_alert:
                     self.on_fire_alert(alert_message, audio_b64)
+
+            # Motor control
+            elif message.get("type") == "motor_control":
+                name = message.get("name", "")
+                action = message.get("action", "")
+                speed = message.get("speed", 1.0)
+                if self.on_motor_control:
+                    self.on_motor_control(name, action, speed)
 
             # Text message
             elif "text" in message:

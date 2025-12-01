@@ -247,6 +247,13 @@ class GeminiWebSocketClient(
                 )
                 return
             }
+            "motor_control" -> {
+                val name = obj["name"]?.jsonPrimitive?.asStringOrNull() ?: "Quạt"
+                val action = obj["action"]?.jsonPrimitive?.asStringOrNull() ?: "stop"
+                val speed = obj["speed"]?.jsonPrimitive?.asFloatOrNull() ?: 0f
+                _events.tryEmit(GeminiRealtimeEvent.MotorControl(name, action, speed))
+                return
+            }
         }
 
         obj["transcription"]?.jsonObject?.let { transcription ->
@@ -324,6 +331,13 @@ private fun kotlinx.serialization.json.JsonPrimitive?.asIntOrNull(): Int? =
 private fun kotlinx.serialization.json.JsonPrimitive?.asDoubleOrNull(): Double? =
     try {
         this?.doubleOrNull
+    } catch (_: Exception) {
+        null
+    }
+
+private fun kotlinx.serialization.json.JsonPrimitive?.asFloatOrNull(): Float? =
+    try {
+        this?.doubleOrNull?.toFloat()
     } catch (_: Exception) {
         null
     }

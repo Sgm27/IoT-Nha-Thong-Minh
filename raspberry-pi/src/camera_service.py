@@ -134,6 +134,8 @@ class CameraService:
         """Main loop capture frames"""
         logger.info("Camera capture loop bắt đầu")
 
+        frame_count = 0
+
         while self.running:
             try:
                 if self.mock_mode:
@@ -145,7 +147,13 @@ class CameraService:
 
                 # Gọi callback nếu có
                 if jpeg_b64 and self.frame_callback:
+                    frame_count += 1
+                    # Log every 10th frame to avoid spam
+                    if frame_count % 10 == 0:
+                        logger.info(f"Đã gửi frame #{frame_count} ({len(jpeg_b64)} bytes)")
                     self.frame_callback(jpeg_b64)
+                elif not jpeg_b64:
+                    logger.warning("Frame capture thất bại")
 
                 # Chờ theo interval
                 time.sleep(self.config.capture_interval)
@@ -154,7 +162,7 @@ class CameraService:
                 logger.error(f"Lỗi trong capture loop: {e}")
                 time.sleep(1.0)
 
-        logger.info("Camera capture loop kết thúc")
+        logger.info(f"Camera capture loop kết thúc (total frames: {frame_count})")
 
     def _capture_frame(self) -> Optional[str]:
         """

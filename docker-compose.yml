@@ -11,6 +11,8 @@ services:
       - ./backend/music:/app/backend/music
     environment:
       - PYTHONUNBUFFERED=1
+    env_file:
+      - ./backend/.env
     restart: unless-stopped
 
   frontend:
@@ -34,15 +36,15 @@ services:
     container_name: iot-raspberry-pi-client
     restart: unless-stopped
 
-    # Uncomment các dòng sau khi chạy trên Raspberry Pi thật:
-    # privileged: true
-    # network_mode: host
-    # devices:
-    #   - /dev/gpiomem:/dev/gpiomem
-    #   - /dev/gpiochip0:/dev/gpiochip0
-    #   - /dev/gpiochip4:/dev/gpiochip4
-    #   - /dev/video0:/dev/video0
-    #   - /dev/snd:/dev/snd
+    # Hardware access for Raspberry Pi
+    privileged: true
+    network_mode: host
+    devices:
+      - /dev/gpiomem:/dev/gpiomem
+      - /dev/gpiochip0:/dev/gpiochip0
+      - /dev/gpiochip4:/dev/gpiochip4
+      - /dev/video0:/dev/video0
+      - /dev/snd:/dev/snd
 
     volumes:
       - ./raspberry-pi/config/.env:/app/config/.env:rw
@@ -51,16 +53,12 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       # Mock mode - set to "false" khi chạy trên Pi thật với hardware
-      - MOCK_MODE=true
-      # Backend URL - sẽ connect tới backend service
-      - BACKEND_URL=ws://backend:8000/ws/gemini
+      - MOCK_MODE=${MOCK_MODE:-false}
+      # Backend URL - connect to localhost (network_mode: host)
+      - WEBSOCKET_SERVER_URL=ws://localhost:8000/ws/gemini
 
     depends_on:
       - backend
-
-    # Comment dòng này khi uncomment network_mode: host
-    networks:
-      - default
 
     # Profiles để control service
     # Chạy: docker-compose --profile raspberry-pi up

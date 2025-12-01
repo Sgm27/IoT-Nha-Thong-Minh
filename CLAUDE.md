@@ -140,6 +140,7 @@ Location: `android-app/`
 {"transcription": {"text": "...", "sender": "User|Gemini", "finished": bool}}
 {"type": "smart_home_light_update", "location": "...", "is_on": bool}
 {"type": "smart_home_music", "matched_song": "...", "stream_url": "..."}
+{"type": "motor_control", "name": "Quạt", "action": "on|off|forward|backward|stop", "speed": 0.0-1.0}
 {"type": "fire_detection_alert", "message": "...", "audio_base64": "..."}
 ```
 
@@ -155,7 +156,7 @@ Location: `android-app/`
 **Bidirectional Streaming** (`backend/app/services/gemini_service.py`):
 - Three concurrent async tasks: client→Gemini relay, Gemini→client relay, keepalive ping
 - Session resumption via persisted handles (token cost optimization)
-- Function calling: Gemini can invoke `turn_on_light`, `turn_off_light`, `play_music`, `pause_music`, `continue_music`
+- Function calling: Gemini can invoke `turn_on_light`, `turn_off_light`, `play_music`, `pause_music`, `continue_music`, `control_motor`
 
 **Configuration**:
 - Voice: "Aoede" (TTS voice name)
@@ -197,8 +198,9 @@ Location: `android-app/`
 **LightingService** (`backend/app/services/smart_home_service.py`):
 - Persists state to `data/light_state.json`
 - Observer pattern for WebSocket real-time updates
-- Default lights: Phòng khách, Phòng ngủ, Bếp, Sân
-- **GPIO Integration**: Designed for 4-channel relay module control (see ITEMS.md)
+- Default lights: Phòng khách, Phòng ngủ, Bếp
+- **GPIO Integration**: Designed for relay module control (see ITEMS.md)
+- `notify_motor_control()` broadcasts motor commands to all connected clients
 
 **MusicService**:
 - Fuzzy string matching (`SequenceMatcher`) for song search
@@ -267,17 +269,34 @@ Backend enters **offline echo mode** when `GOOGLE_API_KEY` is not set:
 ## Hardware Integration (Raspberry Pi)
 
 Required components (see `ITEMS.md` for complete shopping list):
-- Raspberry Pi with 5V-3A power supply
+- Raspberry Pi 5 with 5V-3A power supply
 - Camera (CSI Module 3 or USB webcam)
 - USB microphone
 - Speaker (USB or 3.5mm)
-- 4-channel relay module (5V, opto-isolated)
-- LED lights or real AC devices
+- LEDs for room lights
+- Buzzer for fire alerts
+- L298N motor driver + DC motor (Motor 130) for fan control
 - Jumper wires + GPIO breakout
 
-**GPIO Mapping** (configure in `backend/app/core/config.py`):
-- Relay channels map to rooms (Living room, Bedroom, Kitchen, Yard)
-- LightingService controls relay states via GPIO pins
+**GPIO Mapping** (configure in `raspberry-pi/src/iot_client.py`):
+
+| Device | GPIO Pin(s) | Notes |
+|--------|-------------|-------|
+| LED Phòng khách | GPIO17 | Active HIGH |
+| LED Phòng ngủ | GPIO27 | Active HIGH |
+| LED Bếp | GPIO22 | Active HIGH |
+| Buzzer | GPIO23 | Fire alert |
+| Motor (L298N) | GPIO16 (IN1), GPIO20 (IN2), GPIO18 (ENA) | DC motor speed control |
+
+**Motor Wiring (L298N Driver)**:
+```
+Pi Pin 2 (5V)     → L298N 12V
+Pi Pin 9 (GND)    → L298N GND
+Pi Pin 12 (GPIO18)→ L298N ENA (remove jumper)
+Pi Pin 36 (GPIO16)→ L298N IN1
+Pi Pin 38 (GPIO20)→ L298N IN2
+L298N OUT1/OUT2   → DC Motor wires
+```
 
 **Camera Setup**:
 - CSI: Enable via `sudo raspi-config`, test with `libcamera-jpeg`
@@ -344,6 +363,17 @@ IoT-Nha-Thong-Minh/
 │   ├── nginx.conf
 │   ├── Dockerfile
 │   └── package.json
+├── raspberry-pi/
+│   ├── src/
+│   │   ├── iot_client.py              # Main IoT client orchestrator
+│   │   ├── gpio_devices.py            # GPIO controller (LED, Buzzer, Motor, Servo)
+│   │   ├── websocket_client.py        # WebSocket client for backend
+│   │   ├── camera_service.py          # Camera capture service
+│   │   └── audio_handler.py           # Audio input/output handler
+│   └── scripts/
+│       ├── test-dc-motor.py           # Motor testing script
+│       ├── test-buzzer.py             # Buzzer testing script
+│       └── test-hardware.py           # General hardware test
 ├── android-app/                       # Kotlin Android app
 ├── docker-compose.yml
 ├── start.sh                           # Local dev startup script
@@ -384,9 +414,13 @@ docker-compose logs -f backend
 - **Fire detection not working**: Verify camera permissions, check HSV parameters
 - **Gemini not responding**: Verify `GOOGLE_API_KEY`, check session persistence
 - **Lights not syncing**: Check WebSocket connection, verify light state JSON
+- **Motor not responding**: Ensure IoT client has updated files, check L298N wiring
+- **New Gemini tools not working**: Clear `backend/data/session_handle.json` to reset session
 
 ## Related Documentation
 
 - Backend details: `backend/CLAUDE.md`
 - Frontend details: `frontend/CLAUDE.md`
 - Hardware guide: `ITEMS.md` (Vietnamese)
+- Motor setup: `raspberry-pi/DC_MOTOR_SETUP.md`
+- Motor wiring checklist: `raspberry-pi/MOTOR_WIRING_CHECKLIST.md`

@@ -7,7 +7,7 @@ import asyncio
 import logging
 import signal
 import sys
-from typing import Dict
+from typing import Dict, Optional
 
 from gpio_devices import GPIODevicesController, GPIODeviceConfig, DeviceType
 from camera_service import CameraService, CameraConfig
@@ -46,6 +46,7 @@ class IoTClient:
             mock_mode: Chạy ở chế độ mock (không dùng hardware)
         """
         self.mock_mode = mock_mode
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Initialize components
         self.gpio = GPIODevicesController(gpio_configs, mock_mode=mock_mode)
@@ -65,17 +66,23 @@ class IoTClient:
         # Camera frame → WebSocket
         def on_camera_frame(jpeg_b64: str):
             """Callback khi có frame mới từ camera"""
-            if self.websocket.connected:
-                asyncio.create_task(self.websocket.send_camera_frame(jpeg_b64))
+            if self.websocket.connected and self.loop is not None:
+                # Schedule coroutine from sync thread using thread-safe method
+                asyncio.run_coroutine_threadsafe(
+                    self.websocket.send_camera_frame(jpeg_b64),
+                    self.loop
+                )
 
         self.camera.set_frame_callback(on_camera_frame)
 
         # Microphone audio → WebSocket
         def on_audio_chunk(audio_b64: str):
             """Callback khi có audio chunk từ microphone"""
-            if self.websocket.connected:
-                asyncio.create_task(
-                    self.websocket.send_audio_chunk(audio_b64, self.audio.config.sample_rate)
+            if self.websocket.connected and self.loop is not None:
+                # Schedule coroutine from sync thread using thread-safe method
+                asyncio.run_coroutine_threadsafe(
+                    self.websocket.send_audio_chunk(audio_b64, self.audio.config.sample_rate),
+                    self.loop
                 )
 
         self.audio.set_audio_callback(on_audio_chunk)
@@ -116,15 +123,35 @@ class IoTClient:
 
         self.websocket.set_audio_response_callback(on_audio_response)
 
-        # WebSocket fire alert → Speaker
+        # WebSocket fire alert → Speaker + Buzzer
         def on_fire_alert(message: str, audio_b64: str):
             """Callback khi nhận cảnh báo cháy"""
             logger.warning(f"🔥 CẢNH BÁO CHÁY: {message}")
+
+            # Kích hoạt buzzer - beep 5 lần nhanh
+            self.gpio.buzzer_beep("Buzzer", on_time=0.2, off_time=0.1, n=150)
+
             if audio_b64:
-                # Phát âm thanh cảnh báo
+                # Phát âm thanh cảnh báo qua speaker
                 self.audio.play_audio_chunk(audio_b64, 24000)
 
         self.websocket.set_fire_alert_callback(on_fire_alert)
+
+        # WebSocket motor control → GPIO Motor
+        def on_motor_control(name: str, action: str, speed: float):
+            """Callback khi nhận lệnh điều khiển motor từ server"""
+            logger.info(f"Nhận lệnh motor: '{name}' → {action} (tốc độ {speed*100:.0f}%)")
+
+            if action in ("on", "forward"):
+                self.gpio.motor_forward(name, speed)
+            elif action in ("backward", "reverse"):
+                self.gpio.motor_backward(name, speed)
+            elif action in ("off", "stop"):
+                self.gpio.motor_stop(name)
+            else:
+                logger.warning(f"Hành động motor không hợp lệ: {action}")
+
+        self.websocket.set_motor_control_callback(on_motor_control)
 
         # WebSocket general message → Log
         def on_message(message: dict):
@@ -165,6 +192,9 @@ class IoTClient:
     async def start(self) -> None:
         """Bắt đầu tất cả services"""
         logger.info("=== Bắt đầu IoT Client ===")
+
+        # Lưu event loop để dùng trong callbacks
+        self.loop = asyncio.get_event_loop()
 
         # Start camera capture
         logger.info("Bắt đầu camera capture...")
@@ -237,22 +267,22 @@ async def main():
     # GPIO configs - Cấu hình các thiết bị GPIO
     # Thay đổi theo thiết bị thực tế của bạn!
     gpio_configs = {
-        # LEDs
-        "LED Đỏ": GPIODeviceConfig(
+        # LEDs - Mapped to rooms
+        "Phòng khách": GPIODeviceConfig(
             gpio_pin=17,
-            name="LED Đỏ",
+            name="Phòng khách",
             device_type=DeviceType.LED,
             active_high=True
         ),
-        "LED Xanh": GPIODeviceConfig(
+        "Phòng ngủ": GPIODeviceConfig(
             gpio_pin=27,
-            name="LED Xanh",
+            name="Phòng ngủ",
             device_type=DeviceType.LED,
             active_high=True
         ),
-        "LED Vàng": GPIODeviceConfig(
+        "Bếp": GPIODeviceConfig(
             gpio_pin=22,
-            name="LED Vàng",
+            name="Bếp",
             device_type=DeviceType.LED,
             active_high=True
         ),
@@ -263,11 +293,11 @@ async def main():
             device_type=DeviceType.BUZZER,
             active_high=True
         ),
-        # Servo (nếu có)
-        "Servo Cửa": GPIODeviceConfig(
-            gpio_pin=18,  # GPIO 18 hỗ trợ hardware PWM
-            name="Servo Cửa",
-            device_type=DeviceType.SERVO,
+        # DC Motor (Quạt) - L298N driver
+        "Quạt": GPIODeviceConfig(
+            gpio_pin=(16, 20, 18),  # (IN1=GPIO16, IN2=GPIO20, ENA=GPIO18)
+            name="Quạt",
+            device_type=DeviceType.MOTOR,
         ),
 
         # Comment out các devices bạn chưa có:

@@ -112,11 +112,9 @@ class Settings:
     )
     default_lights: tuple[tuple[str, bool], ...] = field(
         default_factory=lambda: (
-            ("Phòng khách", True),
+            ("Phòng khách", False),
             ("Phòng ngủ", False),
-            ("Nhà bếp", True),
-            ("Ban công", False),
-            ("Nhà tắm", True),
+            ("Bếp", False),
         )
     )
 

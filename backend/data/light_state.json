@@ -1,16 +1,4 @@
 {
-  "ban công": {
-    "name": "ban công",
-    "is_on": true
-  },
-  "nhà bếp": {
-    "name": "nhà bếp",
-    "is_on": true
-  },
-  "nhà tắm": {
-    "name": "nhà tắm",
-    "is_on": true
-  },
   "phòng khách": {
     "name": "phòng khách",
     "is_on": false
@@ -19,8 +7,8 @@
     "name": "phòng ngủ",
     "is_on": false
   },
-  "văn phòng": {
-    "name": "văn phòng",
-    "is_on": true
+  "bếp": {
+    "name": "bếp",
+    "is_on": false
   }
 }

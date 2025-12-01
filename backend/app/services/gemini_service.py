@@ -38,6 +38,7 @@ class GeminiService:
     - play_music: phát bài hát gần giống nhất với tên được yêu cầu
     - pause_music: tạm dừng bài hát đang phát
     - continue_music: tiếp tục phát bài hát đã tạm dừng
+    - control_motor: điều khiển motor/quạt (bật, tắt, điều chỉnh tốc độ)
 
     Quy tắc sử dụng tool:
     1. Nếu người dùng nhắc đến bật đèn, chiếu sáng, sáng đèn,... hãy gọi tool turn_on_light.
@@ -45,6 +46,9 @@ class GeminiService:
     3. Nếu người dùng muốn nghe nhạc, hãy gọi tool play_music và truyền tên bài hát họ nêu ra.
     4. Nếu người dùng yêu cầu tạm dừng nhạc, hãy gọi tool pause_music.
     5. Nếu người dùng yêu cầu bật lại nhạc đã tạm dừng, hãy gọi tool continue_music.
+    6. Nếu người dùng nhắc đến bật quạt, mở quạt, chạy quạt,... hãy gọi tool control_motor với action "on".
+    7. Nếu người dùng nhắc đến tắt quạt, dừng quạt,... hãy gọi tool control_motor với action "off".
+    8. Nếu người dùng muốn điều chỉnh tốc độ quạt (chậm, nhanh, mạnh, nhẹ,...) hãy gọi tool control_motor với speed phù hợp.
 
     Khi xử lý hình ảnh, mô tả chi tiết nội dung ảnh và liên hệ với ngữ cảnh căn nhà.
     Khi trả lời, hãy chia nhỏ nội dung thành các mục rõ ràng, dễ hiểu.
@@ -118,7 +122,7 @@ class GeminiService:
 
         config = self._create_live_config(previous_session_handle)
 
-        send_task = receive_task = ping_task = None
+        send_task = receive_task = ping_task = light_task = None
         fallback_message: Optional[Dict[str, Any]] = None
         try:
             async with self.client.aio.live.connect(model=self.model, config=config) as session:
@@ -129,9 +133,10 @@ class GeminiService:
                     self._relay_gemini_to_client(websocket, session)
                 )
                 ping_task = asyncio.create_task(self._ping_websocket(websocket))
+                light_task = asyncio.create_task(self._forward_light_updates(websocket))
 
                 done, pending = await asyncio.wait(
-                    [send_task, receive_task, ping_task],
+                    [send_task, receive_task, ping_task, light_task],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 for task in pending:
@@ -155,7 +160,7 @@ class GeminiService:
                 "message": "Gemini gặp sự cố khi thiết lập phiên. Ứng dụng sẽ chuyển sang chế độ ngoại tuyến.",
             }
         finally:
-            for task in filter(None, [send_task, receive_task, ping_task]):
+            for task in filter(None, [send_task, receive_task, ping_task, light_task]):
                 if not task.done():
                     task.cancel()
             if fallback_message and websocket.client_state.name == "CONNECTED":
@@ -166,17 +171,34 @@ class GeminiService:
     async def _run_offline_loop(self, websocket: WebSocket) -> None:
         """Fallback mode used during tests when Gemini credentials are absent."""
 
+        async def receive_messages():
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    payload = json.loads(data)
+                    if "text" in payload:
+                        text = payload["text"]
+                        await self._send_safely(websocket, {"text": f"(offline) {text}"})
+                    elif "tool_call" in payload:
+                        await self._handle_tool_calls(websocket, None, payload["tool_call"])
+            except WebSocketDisconnect:
+                logger.info("Offline loop websocket disconnect")
+
+        # Run message receiver and light update forwarder in parallel
+        receive_task = asyncio.create_task(receive_messages())
+        light_task = asyncio.create_task(self._forward_light_updates(websocket))
+
         try:
-            while True:
-                data = await websocket.receive_text()
-                payload = json.loads(data)
-                if "text" in payload:
-                    text = payload["text"]
-                    await self._send_safely(websocket, {"text": f"(offline) {text}"})
-                elif "tool_call" in payload:
-                    await self._handle_tool_calls(websocket, None, payload["tool_call"])
-        except WebSocketDisconnect:
-            logger.info("Offline loop websocket disconnect")
+            done, pending = await asyncio.wait(
+                [receive_task, light_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+        finally:
+            for task in [receive_task, light_task]:
+                if not task.done():
+                    task.cancel()
 
     # ------------------------------------------------------------------
     # Gemini streaming relays
@@ -480,6 +502,46 @@ class GeminiService:
         except WebSocketDisconnect:
             logger.info("Ping loop stopped (disconnect)")
 
+    async def _forward_light_updates(self, websocket: WebSocket) -> None:
+        """Subscribe to lighting service updates and forward them to WebSocket client."""
+        try:
+            # Subscribe to lighting service updates
+            queue = await self.smart_home_service.lighting_service.add_listener()
+            logger.info("🔦 Subscribed to lighting service updates")
+
+            while True:
+                # Wait for update from lighting service
+                update = await queue.get()
+
+                # Forward to WebSocket client
+                if update.get("type") == "update":
+                    light_data = update.get("light", {})
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "type": "smart_home_light_update",
+                            "location": light_data.get("location", ""),
+                            "is_on": light_data.get("is_on", False),
+                        },
+                    )
+                    logger.info(
+                        "Forwarded light update: %s = %s",
+                        light_data.get("location"),
+                        "ON" if light_data.get("is_on") else "OFF"
+                    )
+                elif update.get("type") == "motor_control":
+                    await self._send_safely(websocket, update)
+                    logger.info(
+                        "Forwarded motor control: %s → %s",
+                        update.get("name"),
+                        update.get("action")
+                    )
+        except WebSocketDisconnect:
+            logger.info("Light update forwarding stopped (disconnect)")
+        finally:
+            # Cleanup: remove listener
+            self.smart_home_service.lighting_service.remove_listener(queue)
+
     async def _process_realtime_media_chunk(
         self, websocket: WebSocket, session, chunk: Dict[str, Any]
     ) -> None:
@@ -508,6 +570,10 @@ class GeminiService:
         audio_blob = blob if normalized_mime.startswith("audio/") else None
         media_blob = blob if normalized_mime.startswith("image/") else None
 
+        # Log image receipt
+        if media_blob:
+            logger.info(f"📷 Received camera frame: {len(payload_bytes)} bytes, mime={mime}")
+
         if media_blob and settings.save_captured_image:
             try:
                 self._save_captured_image(payload_bytes, mime)
@@ -518,24 +584,34 @@ class GeminiService:
             logger.debug("Bỏ qua realtime_input với mime type không hỗ trợ: %s", mime)
             return
 
-        await session.send_realtime_input(audio=audio_blob, media=media_blob)
-
+        # Fire detection runs FIRST, independent of Gemini connection
         if media_blob:
             await self._maybe_handle_fire_detection(
                 websocket, payload_bytes, normalized_mime
             )
 
+        # Then send to Gemini (may fail if offline)
+        try:
+            await session.send_realtime_input(audio=audio_blob, media=media_blob)
+        except Exception as e:
+            logger.warning(f"Could not send to Gemini (offline mode?): {e}")
+
     async def _maybe_handle_fire_detection(
         self, websocket: WebSocket, data: bytes, mime: str
     ) -> None:
         if not self.fire_detection_service:
+            logger.warning("Fire detection service not available")
             return
+
+        logger.debug(f"🔥 Processing image for fire detection ({len(data)} bytes)")
+
         try:
             payload = await self.fire_detection_service.process_image(data, mime)
         except Exception:  # pylint: disable=broad-except
             logger.exception("❌ Lỗi khi xử lý phát hiện cháy")
             return
         if payload:
+            logger.warning(f"🚨 FIRE ALERT PAYLOAD READY - sending to client")
             await self._send_safely(websocket, payload)
 
     def _save_captured_image(self, data: bytes, mime: str) -> None:
@@ -749,6 +825,32 @@ class GeminiService:
                         response=payload,
                     )
                 )
+            elif name == "control_motor":
+                device = args.get("device", "Quạt")
+                action = args.get("action", "")
+                speed = args.get("speed", 1.0)
+
+                # Clamp speed to 0-1 range
+                speed = max(0.0, min(1.0, float(speed)))
+
+                logger.info(f"🎮 Gemini điều khiển motor: {device} → {action} (tốc độ {speed*100:.0f}%)")
+
+                # Broadcast motor control to ALL connected clients (including IoT client)
+                self.smart_home_service.lighting_service.notify_motor_control(device, action, speed)
+
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response={
+                            "result": "success",
+                            "device": device,
+                            "action": action,
+                            "speed": speed,
+                        },
+                    )
+                )
+
             else:
                 responses.append(
                     types.FunctionResponse(
@@ -838,6 +940,29 @@ class GeminiService:
                                 "type": "object",
                                 "properties": {},
                                 "required": [],
+                            },
+                        ),
+                        types.FunctionDeclaration(
+                            name="control_motor",
+                            description="Điều khiển motor/quạt (bật, tắt, thay đổi tốc độ)",
+                            parameters={
+                                "type": "object",
+                                "properties": {
+                                    "device": {
+                                        "type": "string",
+                                        "description": "Tên thiết bị motor (mặc định: Quạt)",
+                                    },
+                                    "action": {
+                                        "type": "string",
+                                        "enum": ["on", "off", "forward", "backward", "stop"],
+                                        "description": "Hành động: on (bật), off (tắt), forward (tiến), backward (lùi), stop (dừng)",
+                                    },
+                                    "speed": {
+                                        "type": "number",
+                                        "description": "Tốc độ từ 0.0 đến 1.0 (0% đến 100%). Mặc định 1.0. Ví dụ: chậm=0.3, trung bình=0.6, nhanh/mạnh=1.0",
+                                    },
+                                },
+                                "required": ["action"],
                             },
                         ),
                     ],

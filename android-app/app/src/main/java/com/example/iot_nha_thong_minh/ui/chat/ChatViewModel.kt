@@ -39,8 +39,48 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
     private var resumeListeningAfterPlayback = false
 
     init {
+        loadChatHistory()
         observeGeminiEvents()
         repository.connectGemini()
+    }
+
+    private fun loadChatHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.observeChatMessages()?.collect { messages ->
+                if (messages.isNotEmpty()) {
+                    val maxId = messages.maxOfOrNull { it.id } ?: 0L
+                    if (maxId >= nextMessageId) {
+                        nextMessageId = maxId + 1
+                    }
+                    _uiState.update { state ->
+                        // Only update if we have fewer messages (initial load)
+                        if (state.messages.isEmpty()) {
+                            state.copy(messages = messages)
+                        } else {
+                            state
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun persistMessage(message: ChatMessage) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.saveChatMessage(message)
+            } catch (e: Exception) {
+                // Silently fail on persistence errors
+            }
+        }
+    }
+
+    fun clearChatHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.clearChatHistory()
+            _uiState.update { it.copy(messages = emptyList()) }
+            nextMessageId = 1L
+        }
     }
 
     fun startListening() {
@@ -133,6 +173,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                 errorMessage = null,
             )
         }
+        persistMessage(userMessage)
 
         val sent = repository.sendGeminiText(trimmed)
         if (!sent) {
@@ -168,6 +209,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                 errorMessage = null,
             )
         }
+        persistMessage(userMessage)
 
         val sent = repository.sendGeminiImage(imageData, normalizedMime)
         if (!sent) {
@@ -218,6 +260,7 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
                     is GeminiRealtimeEvent.SmartHomeMusic -> onMusicUpdate(event.requestedTitle, event.matchedSong)
                     is GeminiRealtimeEvent.SmartHomeMusicControl -> onMusicControl(event)
                     is GeminiRealtimeEvent.FireAlert -> onFireAlert(event)
+                    is GeminiRealtimeEvent.MotorControl -> onMotorControl(event)
                 }
             }
         }
@@ -319,6 +362,11 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
         }
 
         if (finished) {
+            // Persist the completed assistant message
+            val finalMessage = _uiState.value.messages.find { it.id == messageId }
+            if (finalMessage != null && !finalMessage.isStreaming) {
+                persistMessage(finalMessage)
+            }
             onAssistantSpeechFinished()
         }
     }
@@ -412,7 +460,25 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
         event.audio?.let { onAssistantAudio(it) }
     }
 
-    private fun appendSystemMessage(message: String) {
+    private fun onMotorControl(event: GeminiRealtimeEvent.MotorControl) {
+        val actionText = when (event.action.lowercase()) {
+            "on" -> "đang bật"
+            "off" -> "đã tắt"
+            "forward" -> "đang quay thuận"
+            "backward" -> "đang quay nghịch"
+            "stop" -> "đã dừng"
+            else -> event.action
+        }
+        val speedPercent = (event.speed * 100).toInt()
+        val message = if (event.speed > 0 && event.action.lowercase() in listOf("on", "forward", "backward")) {
+            "${event.name} $actionText với tốc độ $speedPercent%."
+        } else {
+            "${event.name} $actionText."
+        }
+        appendSystemMessage(message)
+    }
+
+    private fun appendSystemMessage(message: String, shouldPersist: Boolean = false) {
         val trimmed = message.trim()
         if (trimmed.isEmpty()) {
             return
@@ -425,6 +491,9 @@ class ChatViewModel(private val repository: SmartHomeRepository) : ViewModel() {
             isStreaming = false,
         )
         _uiState.update { it.copy(messages = it.messages + systemMessage) }
+        if (shouldPersist) {
+            persistMessage(systemMessage)
+        }
     }
 
     private fun formatTwoDecimals(value: Double): String =

@@ -142,7 +142,16 @@ class LightingService:
         self._persist()
         logger.info("Light %s is now %s", location_key, "on" if state.is_on else "off")
         self._notify_listeners({"type": "update", "light": asdict(state)})
-        return state
+
+    def notify_motor_control(self, device: str, action: str, speed: float) -> None:
+        """Broadcast motor control command to all listeners (including IoT client)."""
+        logger.info(f"Broadcasting motor control: {device} → {action} (speed: {speed*100:.0f}%)")
+        self._notify_listeners({
+            "type": "motor_control",
+            "name": device,
+            "action": action,
+            "speed": speed,
+        })
 
     def get_light_state(self, location: str) -> LightState:
         self._load()
