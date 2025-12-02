@@ -668,5 +668,275 @@
     "role": "assistant",
     "text": "Đã bật bài hát \"Nơi Này Có Anh\" rồi ạ.",
     "timestamp": "2025-11-06T10:55:19.307424"
+  },
+  {
+    "role": "user",
+    "text": "Hello, can you hear me?",
+    "timestamp": "2025-12-02T16:16:38.801406"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể nghe rõ. Bạn cần tôi giúp gì ạ?",
+    "timestamp": "2025-12-02T16:16:38.803387"
+  },
+  {
+    "role": "user",
+    "text": "Bạn Bạn còn nhớ tôi là hay không?",
+    "timestamp": "2025-12-02T16:17:25.072903"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi là trợ lý AI của hệ thống nhà thông minh IoT Nha Thong Minh. Rất vui được hỗ trợ bạn.",
+    "timestamp": "2025-12-02T16:17:25.074300"
+  },
+  {
+    "role": "user",
+    "text": "Bạn còn nhớ tôi là ai không?",
+    "timestamp": "2025-12-02T16:17:34.720425"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi là trợ lý AI của hệ thống nhà thông minh IoT Nha Thong Minh. Rất vui được hỗ trợ bạn.",
+    "timestamp": "2025-12-02T16:17:34.721685"
+  },
+  {
+    "role": "user",
+    "text": "Tôi cơm mà không cần.",
+    "timestamp": "2025-12-02T16:17:48.812096"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn có thể cho tôi biết tên của bạn không? Rất tiếc là tôi không có khả năng ghi nhớ thông tin cá nhân từ các lần trò chuyện trước.",
+    "timestamp": "2025-12-02T16:17:48.813340"
+  },
+  {
+    "role": "user",
+    "text": "Hãy ghi nhớ tôi tên là Ngô Đức Sơn nhé.",
+    "timestamp": "2025-12-02T16:18:01.124881"
+  },
+  {
+    "role": "assistant",
+    "text": "Rất vui được biết bạn, anh Ngô Đức Sơn. Tôi sẽ cố gắng ghi nhớ tên của bạn trong cuộc trò chuyện này. Anh Sơn muốn tôi giúp gì ạ?",
+    "timestamp": "2025-12-02T16:18:01.126184"
+  },
+  {
+    "role": "user",
+    "text": "Tôi có đẹp trai không?",
+    "timestamp": "2025-12-02T16:18:13.629821"
+  },
+  {
+    "role": "assistant",
+    "text": "Với tư cách là một AI, tôi không thể đánh giá ngoại hình của bạn được. Tuy nhiên, tôi tin rằng vẻ đẹp thực sự nằm ở sự tự tin và nhân cách của mỗi người.",
+    "timestamp": "2025-12-02T16:18:13.631942"
+  },
+  {
+    "role": "user",
+    "text": "Bật cho tôi bài hát kho báu đi.",
+    "timestamp": "2025-12-02T16:18:23.436054"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Kho Báu\" cho anh Sơn rồi ạ.",
+    "timestamp": "2025-12-02T16:18:23.437988"
+  },
+  {
+    "role": "user",
+    "text": "dừng.",
+    "timestamp": "2025-12-02T16:18:32.973589"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tạm dừng bài hát \"Kho Báu\" rồi ạ. Anh Sơn có muốn tôi làm gì tiếp theo không?",
+    "timestamp": "2025-12-02T16:18:32.975221"
+  },
+  {
+    "role": "user",
+    "text": "Bật bài hát nơi này có anh.",
+    "timestamp": "2025-12-02T16:18:40.986612"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Nơi Này Có Anh\" cho anh Sơn rồi ạ.",
+    "timestamp": "2025-12-02T16:18:40.988410"
+  },
+  {
+    "role": "user",
+    "text": "<noise>",
+    "timestamp": "2025-12-02T16:18:49.656853"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Nơi Này Có Anh\" cho anh Sơn rồi ạ.",
+    "timestamp": "2025-12-02T16:18:49.659026"
+  },
+  {
+    "role": "user",
+    "text": "Tảm dừng thất.",
+    "timestamp": "2025-12-02T16:18:57.562197"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tạm dừng bài hát \"Nơi Này Có Anh\" rồi ạ.",
+    "timestamp": "2025-12-02T16:18:57.563486"
+  },
+  {
+    "role": "user",
+    "text": "Bật cho tôi bài hát mất kết nối.",
+    "timestamp": "2025-12-02T16:19:04.959789"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát \"Mất Kết Nối\" cho anh Sơn rồi ạ.",
+    "timestamp": "2025-12-02T16:19:04.961765"
+  },
+  {
+    "role": "user",
+    "text": "tổng dừng bài hát. <noise>",
+    "timestamp": "2025-12-02T16:19:18.232482"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tạm dừng bài hát \"Mất Kết Nối\" rồi ạ.",
+    "timestamp": "2025-12-02T16:19:18.234208"
+  },
+  {
+    "role": "user",
+    "text": "Chào bạn.",
+    "timestamp": "2025-12-02T16:33:53.946429"
+  },
+  {
+    "role": "assistant",
+    "text": "Chào bạn, tôi có thể giúp gì cho bạn hôm nay ạ?",
+    "timestamp": "2025-12-02T16:33:53.948878"
+  },
+  {
+    "role": "user",
+    "text": "Tắt đèn phòng khách đi.",
+    "timestamp": "2025-12-02T16:34:04.050749"
+  },
+  {
+    "role": "assistant",
+    "text": "Đèn phòng khách đã được tắt rồi ạ.",
+    "timestamp": "2025-12-02T16:34:04.052559"
+  },
+  {
+    "role": "user",
+    "text": "Bật cho tôi bài hát kho báu đi.",
+    "timestamp": "2025-12-02T16:34:13.973322"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát Kho Báu rồi ạ. Mời bạn thưởng thức.",
+    "timestamp": "2025-12-02T16:34:13.975181"
+  },
+  {
+    "role": "user",
+    "text": "Tàm dừng bài hát lại.",
+    "timestamp": "2025-12-02T16:34:28.648030"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tạm dừng bài hát Kho Báu rồi ạ.",
+    "timestamp": "2025-12-02T16:34:28.650040"
+  },
+  {
+    "role": "user",
+    "text": "Bật quạt đi.",
+    "timestamp": "2025-12-02T16:34:37.087040"
+  },
+  {
+    "role": "assistant",
+    "text": "Quạt đã được bật rồi ạ.",
+    "timestamp": "2025-12-02T16:34:37.088839"
+  },
+  {
+    "role": "user",
+    "text": "Giảm tốc độ quạt xuống 50%.",
+    "timestamp": "2025-12-02T16:34:44.991888"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã điều chỉnh tốc độ quạt xuống 50% rồi ạ.",
+    "timestamp": "2025-12-02T16:34:44.994054"
+  },
+  {
+    "role": "user",
+    "text": ".",
+    "timestamp": "2025-12-02T16:34:54.324503"
+  },
+  {
+    "role": "assistant",
+    "text": "Bạn muốn tôi giúp gì nữa không ạ?",
+    "timestamp": "2025-12-02T16:34:54.326112"
+  },
+  {
+    "role": "user",
+    "text": "Bật bài hát phép màu đi.",
+    "timestamp": "2025-12-02T16:35:05.609951"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát Phép Màu rồi ạ. Chúc bạn nghe nhạc vui vẻ.",
+    "timestamp": "2025-12-02T16:35:05.612043"
+  },
+  {
+    "role": "user",
+    "text": "Tiếp tục bài hát màu.",
+    "timestamp": "2025-12-02T16:35:42.216357"
+  },
+  {
+    "role": "assistant",
+    "text": "Bài hát Phép Màu đang được tiếp tục phát rồi ạ.",
+    "timestamp": "2025-12-02T16:35:42.218894"
+  },
+  {
+    "role": "user",
+    "text": "Tàm trúng.",
+    "timestamp": "2025-12-02T16:35:48.041530"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã tạm dừng bài hát Phép Màu rồi ạ.",
+    "timestamp": "2025-12-02T16:35:48.043320"
+  },
+  {
+    "role": "user",
+    "text": "Đổi sang bài hát người như anh xứng đáng cô đơn.",
+    "timestamp": "2025-12-02T16:35:57.480594"
+  },
+  {
+    "role": "assistant",
+    "text": "Đã bật bài hát Người Như Anh Xứng Đáng Cô Đơn rồi ạ.",
+    "timestamp": "2025-12-02T16:35:57.482822"
+  },
+  {
+    "role": "user",
+    "text": "tôi gửi là gì đấy?",
+    "timestamp": "2025-12-02T16:36:44.457156"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi thấy bạn vừa gửi một hình ảnh chiếc bàn phím cơ. Bàn phím có tông màu xanh trắng nhạt, với các phím màu trắng ở hàng trên cùng và chuyển dần sang màu xanh nhạt ở các hàng dưới. Phía trên bàn phím có thể nhìn thấy một phần màn hình máy tính với chữ \"GIGABYTE\".",
+    "timestamp": "2025-12-02T16:36:44.459365"
+  },
+  {
+    "role": "user",
+    "text": "Bạn còn nhớ tôi là không?",
+    "timestamp": "2025-12-02T16:37:39.025528"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi là trợ lý AI cho hệ thống nhà thông minh IoT Nha Thong Minh. Tôi luôn sẵn sàng hỗ trợ bạn.",
+    "timestamp": "2025-12-02T16:37:39.027671"
+  },
+  {
+    "role": "user",
+    "text": "Alo bạn nhớ tôi lại không?",
+    "timestamp": "2025-12-02T16:38:43.270442"
+  },
+  {
+    "role": "assistant",
+    "text": "Tôi nhớ bạn là người dùng đang tương tác với tôi trong hệ thống nhà thông minh IoT Nha Thong Minh.",
+    "timestamp": "2025-12-02T16:38:43.272277"
   }
 ]

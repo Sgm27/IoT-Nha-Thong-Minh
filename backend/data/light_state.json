@@ -1,14 +1,14 @@
 {
+  "bếp": {
+    "name": "bếp",
+    "is_on": false
+  },
   "phòng khách": {
     "name": "phòng khách",
     "is_on": false
   },
   "phòng ngủ": {
     "name": "phòng ngủ",
-    "is_on": false
-  },
-  "bếp": {
-    "name": "bếp",
-    "is_on": false
+    "is_on": true
   }
 }
