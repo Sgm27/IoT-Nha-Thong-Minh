@@ -210,6 +210,47 @@ class WebSocketClient:
             logger.error(f"Lỗi khi gửi keepalive: {e}")
             return False
 
+    async def send_hardware_fire_alert(
+        self,
+        sensor_name: str,
+        level: str,
+        message: str,
+        consecutive_count: int = 0
+    ) -> bool:
+        """
+        Gửi cảnh báo cháy từ cảm biến phần cứng
+
+        Args:
+            sensor_name: Tên cảm biến phát hiện
+            level: Mức độ cảnh báo (warning, alert, critical)
+            message: Thông điệp cảnh báo
+            consecutive_count: Số lần phát hiện liên tiếp
+
+        Returns:
+            True nếu thành công
+        """
+        if not self.connected or self.websocket is None:
+            logger.warning("WebSocket chưa kết nối - không thể gửi fire alert")
+            return False
+
+        try:
+            import time
+            alert_message = {
+                "type": "hardware_fire_alert",
+                "sensor_name": sensor_name,
+                "level": level,
+                "message": message,
+                "consecutive_count": consecutive_count,
+                "timestamp": time.time(),
+                "source": "flame_sensor_module"
+            }
+            await self.websocket.send(json.dumps(alert_message))
+            logger.info(f"Đã gửi hardware fire alert: {level} - {sensor_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi gửi hardware fire alert: {e}")
+            return False
+
     async def receive_loop(self) -> None:
         """Main loop để nhận messages từ server"""
         while self.running:
