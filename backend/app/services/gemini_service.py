@@ -518,6 +518,7 @@ class GeminiService:
 
     async def _forward_light_updates(self, websocket: WebSocket) -> None:
         """Subscribe to lighting service updates and forward them to WebSocket client."""
+        queue = None
         try:
             # Subscribe to lighting service updates
             queue = await self.smart_home_service.lighting_service.add_listener()
@@ -573,7 +574,8 @@ class GeminiService:
             logger.info("Light update forwarding stopped (disconnect)")
         finally:
             # Cleanup: remove listener
-            self.smart_home_service.lighting_service.remove_listener(queue)
+            if queue is not None:
+                self.smart_home_service.lighting_service.remove_listener(queue)
 
     async def _process_realtime_media_chunk(
         self, websocket: WebSocket, session, chunk: Dict[str, Any]
