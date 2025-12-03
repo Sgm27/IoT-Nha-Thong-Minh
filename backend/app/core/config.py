@@ -114,7 +114,7 @@ class Settings:
         default_factory=lambda: (
             ("Phòng khách", False),
             ("Phòng ngủ", False),
-            ("Bếp", False),
+            ("Nhà bếp", False),
         )
     )
     # Face++ Recognition Settings

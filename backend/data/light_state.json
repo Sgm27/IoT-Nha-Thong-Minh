@@ -1,6 +1,6 @@
 {
-  "bếp": {
-    "name": "bếp",
+  "nhà bếp": {
+    "name": "nhà bếp",
     "is_on": false
   },
   "phòng khách": {

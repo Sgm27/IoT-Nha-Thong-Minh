@@ -361,9 +361,9 @@ async def main():
             device_type=DeviceType.LED,
             active_high=True
         ),
-        "Bếp": GPIODeviceConfig(
+        "Nhà bếp": GPIODeviceConfig(
             gpio_pin=22,
-            name="Bếp",
+            name="Nhà bếp",
             device_type=DeviceType.LED,
             active_high=True
         ),
