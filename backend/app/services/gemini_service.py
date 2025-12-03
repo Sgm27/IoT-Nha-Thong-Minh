@@ -8,6 +8,7 @@ import binascii
 import datetime as dt
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
@@ -17,6 +18,7 @@ from google import genai
 from google.genai import types
 
 from app.core.config import settings
+from app.services.face_recognition_service import FaceRecognitionService, get_face_recognition_service
 from app.services.fire_detection_service import FireDetectionService
 from app.services.notification_voice_service import NotificationVoiceService
 from app.services.session_service import SessionService
@@ -62,6 +64,7 @@ class GeminiService:
         smart_home_service: Optional[SmartHomeService] = None,
         notification_voice_service: Optional[NotificationVoiceService] = None,
         fire_detection_service: Optional[FireDetectionService] = None,
+        face_recognition_service: Optional[FaceRecognitionService] = None,
         history_file: Optional[Path] = None,
     ) -> None:
         self.client = client
@@ -76,6 +79,7 @@ class GeminiService:
         self.fire_detection_service = fire_detection_service or FireDetectionService(
             notification_voice_service=self.notification_voice_service
         )
+        self.face_recognition_service = face_recognition_service or get_face_recognition_service()
 
         self.conversation_history_file: Path = history_file or settings.conversation_history_file
         self.conversation_history_file.parent.mkdir(parents=True, exist_ok=True)
@@ -93,6 +97,11 @@ class GeminiService:
         self._default_output_sample_rate = 24000
         self._latest_session_handle: Optional[str] = None
         self._latest_token_usage: Optional[Dict[str, int]] = None
+
+        # Door control state
+        self._last_door_open_time: float = 0.0
+        self._door_open_cooldown_seconds: float = 10.0  # Cooldown between door opens
+        self._door_auto_close_seconds: float = 5.0  # Auto close after this many seconds
 
     # ------------------------------------------------------------------
     # WebSocket orchestration
@@ -608,10 +617,12 @@ class GeminiService:
             logger.debug("Bỏ qua realtime_input với mime type không hỗ trợ: %s", mime)
             return
 
-        # Fire detection runs FIRST, independent of Gemini connection
+        # Fire detection and face recognition run in parallel, independent of Gemini connection
         if media_blob:
-            await self._maybe_handle_fire_detection(
-                websocket, payload_bytes, normalized_mime
+            await asyncio.gather(
+                self._maybe_handle_fire_detection(websocket, payload_bytes, normalized_mime),
+                self._maybe_handle_face_recognition(websocket, payload_bytes),
+                return_exceptions=True,
             )
 
         # Then send to Gemini (may fail if offline)
@@ -637,6 +648,84 @@ class GeminiService:
         if payload:
             logger.warning(f"🚨 FIRE ALERT PAYLOAD READY - sending to client")
             await self._send_safely(websocket, payload)
+
+    async def _maybe_handle_face_recognition(self, websocket: WebSocket, data: bytes) -> None:
+        """Process image for face recognition against host faces.
+
+        When host face is detected, automatically opens the door via servo.
+        Includes cooldown to prevent multiple opens and auto-close after delay.
+        """
+        if not self.face_recognition_service:
+            logger.warning("Face recognition service not available")
+            return
+
+        if not self.face_recognition_service.is_enabled:
+            return
+
+        logger.debug(f"👤 Processing image for face recognition ({len(data)} bytes)")
+
+        try:
+            result = await self.face_recognition_service.process_image(data)
+
+            # If host face detected, open the door
+            if result.get("is_host_detected"):
+                matched_host = result.get("matched_host", "Unknown")
+                confidence = result.get("confidence", 0.0)
+
+                # Check cooldown to prevent multiple opens
+                current_time = time.time()
+                if current_time - self._last_door_open_time < self._door_open_cooldown_seconds:
+                    logger.debug(
+                        f"Door open cooldown active, skipping (last open: {self._last_door_open_time:.1f}s ago)"
+                    )
+                    return
+
+                self._last_door_open_time = current_time
+
+                logger.info(
+                    f"🚪 Nhận diện chủ nhà thành công: {matched_host} (confidence: {confidence:.2f}%) - Mở cửa!"
+                )
+
+                # Notify IoT client to open door via LightingService observer
+                self.smart_home_service.lighting_service.notify_door_control(
+                    device="Cửa",
+                    action="open",
+                    angle=90.0,  # Full open
+                )
+
+                # Send notification to frontend
+                await self._send_safely(websocket, {
+                    "type": "face_recognition_result",
+                    "is_host_detected": True,
+                    "matched_host": matched_host,
+                    "confidence": confidence,
+                    "door_action": "open",
+                })
+
+                # Schedule auto-close after delay
+                asyncio.create_task(self._auto_close_door(websocket))
+
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("❌ Lỗi khi xử lý nhận diện khuôn mặt")
+
+    async def _auto_close_door(self, websocket: WebSocket) -> None:
+        """Automatically close the door after a delay."""
+        await asyncio.sleep(self._door_auto_close_seconds)
+
+        logger.info(f"🚪 Tự động đóng cửa sau {self._door_auto_close_seconds}s")
+
+        # Notify IoT client to close door
+        self.smart_home_service.lighting_service.notify_door_control(
+            device="Cửa",
+            action="close",
+            angle=0.0,
+        )
+
+        # Send notification to frontend
+        await self._send_safely(websocket, {
+            "type": "door_auto_closed",
+            "door_action": "close",
+        })
 
     def _save_captured_image(self, data: bytes, mime: str) -> None:
         extension = self._infer_extension_from_mime(mime)

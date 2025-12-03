@@ -45,6 +45,7 @@ class WebSocketClient:
         self.on_audio_response: Optional[Callable[[str, int], None]] = None
         self.on_fire_alert: Optional[Callable[[str, str], None]] = None
         self.on_motor_control: Optional[Callable[[str, str, float], None]] = None
+        self.on_door_control: Optional[Callable[[str, str, float], None]] = None
         self.on_message: Optional[Callable[[Dict[str, Any]], None]] = None
 
     def set_light_update_callback(self, callback: Callable[[str, bool], None]) -> None:
@@ -62,6 +63,10 @@ class WebSocketClient:
     def set_motor_control_callback(self, callback: Callable[[str, str, float], None]) -> None:
         """Callback khi nhận lệnh điều khiển motor (name, action, speed)"""
         self.on_motor_control = callback
+
+    def set_door_control_callback(self, callback: Callable[[str, str, float], None]) -> None:
+        """Callback khi nhận lệnh điều khiển cửa (name, action, angle)"""
+        self.on_door_control = callback
 
     def set_message_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
         """Callback cho tất cả messages"""
@@ -324,6 +329,14 @@ class WebSocketClient:
                 speed = message.get("speed", 1.0)
                 if self.on_motor_control:
                     self.on_motor_control(name, action, speed)
+
+            # Door control (servo)
+            elif message.get("type") == "door_control":
+                name = message.get("name", "")
+                action = message.get("action", "")
+                angle = message.get("angle", 0.0)
+                if self.on_door_control:
+                    self.on_door_control(name, action, angle)
 
             # Text message
             elif "text" in message:

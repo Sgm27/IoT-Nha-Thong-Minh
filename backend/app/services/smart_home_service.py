@@ -154,6 +154,22 @@ class LightingService:
             "speed": speed,
         })
 
+    def notify_door_control(self, device: str, action: str, angle: float = 90.0) -> None:
+        """Broadcast door control command to all listeners (including IoT client).
+
+        Args:
+            device: Tên cửa (ví dụ: "Cửa")
+            action: Hành động ("open", "close", "set_angle")
+            angle: Góc mở cửa (0-90°, mặc định 90° = mở hoàn toàn)
+        """
+        logger.info(f"Broadcasting door control: {device} → {action} (angle: {angle}°)")
+        self._notify_listeners({
+            "type": "door_control",
+            "name": device,
+            "action": action,
+            "angle": angle,
+        })
+
     def get_light_state(self, location: str) -> LightState:
         self._load()
         location_key = location.lower().strip()

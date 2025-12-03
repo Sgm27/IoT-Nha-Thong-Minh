@@ -173,6 +173,27 @@ class IoTClient:
 
         self.websocket.set_motor_control_callback(on_motor_control)
 
+        # WebSocket door control → GPIO Servo
+        def on_door_control(name: str, action: str, angle: float):
+            """Callback khi nhận lệnh điều khiển cửa từ server"""
+            logger.info(f"Nhận lệnh cửa: '{name}' → {action} (góc {angle}°)")
+
+            if action == "open":
+                # Mở cửa = xoay servo đến góc mở (90° cho servo 90)
+                self.gpio.servo_set_angle(name, angle if angle > 0 else 90)
+                logger.info(f"🚪 Đã mở cửa '{name}'")
+            elif action == "close":
+                # Đóng cửa = xoay servo về 0°
+                self.gpio.servo_set_angle(name, 0)
+                logger.info(f"🚪 Đã đóng cửa '{name}'")
+            elif action == "set_angle":
+                # Đặt góc tùy chỉnh
+                self.gpio.servo_set_angle(name, angle)
+            else:
+                logger.warning(f"Hành động cửa không hợp lệ: {action}")
+
+        self.websocket.set_door_control_callback(on_door_control)
+
         # WebSocket general message → Log
         def on_message(message: dict):
             """Callback cho tất cả messages"""
@@ -367,6 +388,18 @@ async def main():
             name="Cảm biến lửa",
             device_type=DeviceType.FLAME_SENSOR,
             # active_high=False vì sensor output LOW khi có lửa
+        ),
+
+        # Door Servo (Servo cửa) - SG90 hoặc MG90S
+        # Kết nối: Signal → GPIO25, VCC → 5V, GND → GND
+        # 0° = đóng cửa, 90° = mở cửa
+        "Cửa": GPIODeviceConfig(
+            gpio_pin=25,  # GPIO25 cho Signal
+            name="Cửa",
+            device_type=DeviceType.SERVO,
+            min_pulse_width=0.5/1000,   # 0.5ms cho SG90
+            max_pulse_width=2.5/1000,   # 2.5ms cho SG90
+            frame_width=20.0/1000,      # 20ms (50Hz)
         ),
 
         # Comment out các devices bạn chưa có:

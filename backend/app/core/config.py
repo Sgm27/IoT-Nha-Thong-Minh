@@ -117,6 +117,27 @@ class Settings:
             ("Bếp", False),
         )
     )
+    # Face++ Recognition Settings
+    facepp_api_key: Optional[str] = field(
+        default_factory=lambda: _env_str("FACEPP_API_KEY", None)
+    )
+    facepp_api_secret: Optional[str] = field(
+        default_factory=lambda: _env_str("FACEPP_API_SECRET", None)
+    )
+    facepp_compare_url: str = field(
+        default_factory=lambda: _env_str(
+            "FACEPP_COMPARE_URL", "https://api-us.faceplusplus.com/facepp/v3/compare"
+        )
+    )
+    host_faces_directory: Path = field(
+        default_factory=lambda: _env_path("HOST_FACES_DIRECTORY", Path("data") / "host")
+    )
+    face_recognition_threshold: float = field(
+        default_factory=lambda: _env_float("FACE_RECOGNITION_THRESHOLD", 80.0)
+    )
+    face_recognition_enabled: bool = field(
+        default_factory=lambda: _env_bool("FACE_RECOGNITION_ENABLED", True)
+    )
 
 
 @lru_cache()
