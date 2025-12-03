@@ -2,7 +2,6 @@ package com.example.iot_nha_thong_minh.ui.chat
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioTrack
 import android.util.Log
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeAudio
@@ -11,12 +10,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
-private const val DEFAULT_SAMPLE_RATE = 24_000
+// Output sample rate from Gemini (24kHz) - same as web frontend
+private const val OUTPUT_SAMPLE_RATE = 24_000
 private const val BYTES_PER_SAMPLE = 2 // PCM 16-bit = 2 bytes per sample
 
 class GeminiAudioPlayer {
@@ -31,10 +32,7 @@ class GeminiAudioPlayer {
     private var audioTrack: AudioTrack? = null
 
     @Volatile
-    private var currentSampleRate = DEFAULT_SAMPLE_RATE
-
-    @Volatile
-    private var expectedEndTimeMs: Long = 0
+    private var currentSampleRate = OUTPUT_SAMPLE_RATE
 
     init {
         scope.launch {
@@ -48,7 +46,8 @@ class GeminiAudioPlayer {
         if (audio.data.isEmpty()) {
             return
         }
-        val rate = audio.sampleRate?.takeIf { it > 0 } ?: currentSampleRate
+        // Gemini output is always 24kHz - use OUTPUT_SAMPLE_RATE as default
+        val rate = audio.sampleRate?.takeIf { it > 0 } ?: OUTPUT_SAMPLE_RATE
         scope.launch {
             queue.send(AudioChunk(audio.data, rate))
         }
@@ -68,69 +67,103 @@ class GeminiAudioPlayer {
             }
             audioTrack = null
         }
-        expectedEndTimeMs = 0
     }
 
     private suspend fun playChunk(chunk: AudioChunk) {
         playbackMutex.withLock {
             try {
-                // Đợi đến khi chunk trước đó kết thúc
-                val currentTimeMs = System.currentTimeMillis()
-                if (expectedEndTimeMs > currentTimeMs) {
-                    val waitTimeMs = expectedEndTimeMs - currentTimeMs
-                    delay(waitTimeMs)
+                // Align bytes to 2-byte boundary (same as web frontend)
+                val alignedData = alignPcmData(chunk.data)
+                if (alignedData.isEmpty()) {
+                    return
                 }
 
                 ensureTrack(chunk.sampleRate)
                 val track = audioTrack ?: return
-                
-                // Tính toán thời gian phát của chunk này
-                val sampleRate = chunk.sampleRate
-                val totalBytes = chunk.data.size
-                val totalSamples = totalBytes / BYTES_PER_SAMPLE
-                val durationMs = (totalSamples * 1000L) / sampleRate
-                
-                // Ghi nhận thời gian bắt đầu trước khi ghi dữ liệu
-                val startTimeMs = System.currentTimeMillis()
-                
-                var offset = 0
-                val bytes = chunk.data
-                
-                while (offset < bytes.size) {
-                    val written = synchronized(audioLock) {
-                        try {
-                            track.write(bytes, offset, bytes.size - offset)
-                        } catch (error: IllegalStateException) {
-                            Log.e("GeminiAudioPlayer", "Không thể ghi dữ liệu âm thanh", error)
-                            0
-                        }
-                    }
-                    if (written <= 0) {
-                        break
-                    }
-                    offset += written
-                }
-                
+
+                // Start playback before writing (streaming mode best practice)
                 synchronized(audioLock) {
                     if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
                         try {
                             track.play()
                         } catch (error: IllegalStateException) {
                             Log.e("GeminiAudioPlayer", "Không thể phát âm thanh", error)
+                            return
                         }
                     }
                 }
-                
-                // Cập nhật thời gian kết thúc dự kiến
-                expectedEndTimeMs = startTimeMs + durationMs
+
+                // Write PCM data using ShortArray for correct byte order handling
+                val shortBuffer = convertToShortArray(alignedData)
+                if (shortBuffer.isEmpty()) {
+                    return
+                }
+
+                var offset = 0
+                while (offset < shortBuffer.size) {
+                    val written = synchronized(audioLock) {
+                        try {
+                            track.write(
+                                shortBuffer,
+                                offset,
+                                shortBuffer.size - offset,
+                                AudioTrack.WRITE_BLOCKING
+                            )
+                        } catch (error: IllegalStateException) {
+                            Log.e("GeminiAudioPlayer", "Không thể ghi dữ liệu âm thanh", error)
+                            -1
+                        }
+                    }
+                    if (written < 0) {
+                        Log.e("GeminiAudioPlayer", "Lỗi ghi âm thanh: $written")
+                        break
+                    }
+                    if (written == 0) {
+                        // Buffer full, wait a bit
+                        kotlinx.coroutines.delay(5)
+                        continue
+                    }
+                    offset += written
+                }
             } catch (error: Exception) {
                 Log.e("GeminiAudioPlayer", "Lỗi khi phát âm thanh của Gemini", error)
             }
         }
     }
 
+    /**
+     * Align PCM data to 2-byte boundary (same as web frontend's decodeAudioChunk)
+     */
+    private fun alignPcmData(data: ByteArray): ByteArray {
+        val remainder = data.size % BYTES_PER_SAMPLE
+        return if (remainder == 0) {
+            data
+        } else {
+            data.copyOf(data.size - remainder)
+        }
+    }
+
+    /**
+     * Convert ByteArray to ShortArray with proper little-endian byte order
+     * This ensures correct PCM16 interpretation (same as web frontend's Int16Array)
+     */
+    private fun convertToShortArray(data: ByteArray): ShortArray {
+        if (data.isEmpty()) {
+            return ShortArray(0)
+        }
+        val shortCount = data.size / BYTES_PER_SAMPLE
+        val shortArray = ShortArray(shortCount)
+
+        // Use ByteBuffer with LITTLE_ENDIAN order (same as JavaScript Int16Array)
+        val byteBuffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until shortCount) {
+            shortArray[i] = byteBuffer.getShort()
+        }
+        return shortArray
+    }
+
     private fun ensureTrack(sampleRate: Int) {
-        val desiredRate = sampleRate.takeIf { it > 0 } ?: DEFAULT_SAMPLE_RATE
+        val desiredRate = sampleRate.takeIf { it > 0 } ?: OUTPUT_SAMPLE_RATE
         synchronized(audioLock) {
             val current = audioTrack
             if (current != null && currentSampleRate == desiredRate && current.state == AudioTrack.STATE_INITIALIZED) {
@@ -148,17 +181,26 @@ class GeminiAudioPlayer {
             AudioFormat.CHANNEL_OUT_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
         )
-        val bufferSize = if (minBuffer > 0) minBuffer else sampleRate
+        // Use larger buffer to prevent underrun and noise
+        // At least 0.5 seconds of audio or 4x minBuffer
+        val halfSecondBuffer = sampleRate * BYTES_PER_SAMPLE / 2
+        val bufferSize = if (minBuffer > 0) {
+            maxOf(minBuffer * 4, halfSecondBuffer)
+        } else {
+            halfSecondBuffer
+        }
+
         val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+            .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .setLegacyStreamType(AudioManager.STREAM_MUSIC)
             .build()
+
         val format = AudioFormat.Builder()
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
             .setSampleRate(sampleRate)
             .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
             .build()
+
         return AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(format)
