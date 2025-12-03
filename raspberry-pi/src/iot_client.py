@@ -13,6 +13,7 @@ from gpio_devices import GPIODevicesController, GPIODeviceConfig, DeviceType
 from camera_service import CameraService, CameraConfig
 from audio_handler import AudioHandler, AudioConfig
 from websocket_client import WebSocketClient, WebSocketConfig
+from flame_sensor_service import FlameSensorService, FlameSensorConfig, FireDetectionResult
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class IoTClient:
     - Camera Service (USB webcam)
     - Audio Handler (microphone + speaker)
     - WebSocket Client (kết nối backend)
+    - Flame Sensor Service (cảm biến lửa phần cứng)
     """
 
     def __init__(
@@ -35,6 +37,7 @@ class IoTClient:
         camera_config: CameraConfig,
         audio_config: AudioConfig,
         websocket_config: WebSocketConfig,
+        flame_sensor_config: Optional[FlameSensorConfig] = None,
         mock_mode: bool = False
     ):
         """
@@ -43,6 +46,7 @@ class IoTClient:
             camera_config: Camera configuration
             audio_config: Audio configuration
             websocket_config: WebSocket configuration
+            flame_sensor_config: Flame sensor configuration (optional)
             mock_mode: Chạy ở chế độ mock (không dùng hardware)
         """
         self.mock_mode = mock_mode
@@ -53,6 +57,22 @@ class IoTClient:
         self.camera = CameraService(camera_config, mock_mode=mock_mode)
         self.audio = AudioHandler(audio_config, mock_mode=mock_mode)
         self.websocket = WebSocketClient(websocket_config)
+
+        # Initialize flame sensor service if there are flame sensors configured
+        has_flame_sensors = any(
+            cfg.device_type == DeviceType.FLAME_SENSOR
+            for cfg in gpio_configs.values()
+        )
+        if has_flame_sensors:
+            self.flame_sensor = FlameSensorService(
+                gpio_controller=self.gpio,
+                config=flame_sensor_config or FlameSensorConfig(),
+                mock_mode=mock_mode
+            )
+            logger.info("Flame sensor service initialized")
+        else:
+            self.flame_sensor = None
+            logger.info("No flame sensors configured")
 
         # Setup callbacks
         self._setup_callbacks()
@@ -161,6 +181,37 @@ class IoTClient:
 
         self.websocket.set_message_callback(on_message)
 
+        # Flame sensor alert → WebSocket + Buzzer
+        if self.flame_sensor:
+            def on_hardware_fire_alert(result: FireDetectionResult):
+                """Callback khi flame sensor phát hiện lửa"""
+                logger.warning(f"🔥 FLAME SENSOR ALERT: {result.message}")
+
+                # Kích hoạt buzzer dựa trên mức độ
+                if result.level.value == "critical":
+                    # Beep liên tục cho critical
+                    self.gpio.buzzer_beep("Buzzer", on_time=0.1, off_time=0.05, n=200)
+                elif result.level.value == "alert":
+                    # Beep nhanh cho alert
+                    self.gpio.buzzer_beep("Buzzer", on_time=0.2, off_time=0.1, n=100)
+                elif result.level.value == "warning":
+                    # Beep chậm cho warning
+                    self.gpio.buzzer_beep("Buzzer", on_time=0.3, off_time=0.2, n=5)
+
+                # Gửi alert tới backend
+                if self.websocket.connected and self.loop is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        self.websocket.send_hardware_fire_alert(
+                            sensor_name=result.sensor_name,
+                            level=result.level.value,
+                            message=result.message,
+                            consecutive_count=result.consecutive_count
+                        ),
+                        self.loop
+                    )
+
+            self.flame_sensor.set_fire_alert_callback(on_hardware_fire_alert)
+
     async def initialize(self) -> bool:
         """
         Khởi tạo tất cả components
@@ -207,6 +258,11 @@ class IoTClient:
         logger.info("Bắt đầu audio playback...")
         self.audio.start_playback()
 
+        # Start flame sensor service
+        if self.flame_sensor:
+            logger.info("Bắt đầu flame sensor service...")
+            self.flame_sensor.start()
+
         # Start WebSocket client
         logger.info("Bắt đầu WebSocket client...")
         self.running = True
@@ -219,6 +275,10 @@ class IoTClient:
         logger.info("=== Dừng IoT Client ===")
 
         self.running = False
+
+        # Stop flame sensor
+        if self.flame_sensor:
+            await self.flame_sensor.stop()
 
         # Stop WebSocket
         self.websocket.stop()
@@ -300,6 +360,15 @@ async def main():
             device_type=DeviceType.MOTOR,
         ),
 
+        # Flame Sensor (Cảm biến lửa) - Module phát hiện lửa
+        # Kết nối: DO → GPIO24 (hoặc GPIO khác còn trống)
+        "Cảm biến lửa": GPIODeviceConfig(
+            gpio_pin=24,  # GPIO24 cho DO (Digital Output)
+            name="Cảm biến lửa",
+            device_type=DeviceType.FLAME_SENSOR,
+            # active_high=False vì sensor output LOW khi có lửa
+        ),
+
         # Comment out các devices bạn chưa có:
         # "Relay 1": GPIODeviceConfig(
         #     gpio_pin=24,
@@ -334,6 +403,14 @@ async def main():
         ping_interval=10.0,
     )
 
+    # Flame sensor config
+    flame_sensor_config = FlameSensorConfig(
+        poll_interval=0.1,       # 100ms - đọc nhanh
+        confirm_readings=3,       # 3 lần liên tiếp để xác nhận
+        alert_cooldown=10.0,      # 10s giữa các alerts
+        critical_threshold=10,    # 10 lần để nâng lên critical
+    )
+
     # Mock mode để test (không cần hardware thật)
     # Set MOCK_MODE=true trong environment để enable
     import os
@@ -345,6 +422,7 @@ async def main():
         camera_config=camera_config,
         audio_config=audio_config,
         websocket_config=websocket_config,
+        flame_sensor_config=flame_sensor_config,
         mock_mode=mock_mode
     )
 

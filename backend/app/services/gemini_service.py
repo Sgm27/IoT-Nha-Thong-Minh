@@ -259,6 +259,11 @@ class GeminiService:
                         websocket, data["voice_notification_request"]
                     )
                     continue
+
+                # Handle hardware fire alerts from IoT client (flame sensor module)
+                if data.get("type") == "hardware_fire_alert":
+                    await self._handle_hardware_fire_alert(websocket, data)
+                    continue
         except WebSocketDisconnect:
             logger.info("Client disconnected (send loop)")
         except asyncio.CancelledError:
@@ -535,6 +540,25 @@ class GeminiService:
                         "Forwarded motor control: %s → %s",
                         update.get("name"),
                         update.get("action")
+                    )
+                elif update.get("type") == "hardware_fire_alert":
+                    # Forward hardware fire alert to all connected clients
+                    await self._send_safely(
+                        websocket,
+                        {
+                            "type": "fire_detection_alert",
+                            "source": "hardware_sensor",
+                            "sensor_name": update.get("sensor_name", "Unknown"),
+                            "level": update.get("level", "warning"),
+                            "message": update.get("message", ""),
+                            "consecutive_count": update.get("consecutive_count", 0),
+                            "timestamp": update.get("timestamp", ""),
+                        },
+                    )
+                    logger.warning(
+                        "🔥 Forwarded hardware fire alert: %s (level: %s)",
+                        update.get("sensor_name"),
+                        update.get("level")
                     )
         except WebSocketDisconnect:
             logger.info("Light update forwarding stopped (disconnect)")
@@ -1036,6 +1060,68 @@ class GeminiService:
             lock = asyncio.Lock()
             self._send_locks[websocket] = lock
         return lock
+
+    async def _handle_hardware_fire_alert(self, websocket: WebSocket, data: Dict[str, Any]) -> None:
+        """
+        Handle fire alerts from hardware flame sensor module (Raspberry Pi).
+
+        Args:
+            websocket: The WebSocket connection that sent the alert
+            data: Alert data containing sensor_name, level, message, consecutive_count
+        """
+        sensor_name = data.get("sensor_name", "Unknown")
+        level = data.get("level", "warning")
+        message = data.get("message", "Phát hiện lửa từ cảm biến phần cứng")
+        consecutive_count = data.get("consecutive_count", 0)
+        timestamp = data.get("timestamp")
+
+        logger.warning(
+            "🔥 HARDWARE FIRE ALERT: sensor=%s, level=%s, count=%d, msg=%s",
+            sensor_name, level, consecutive_count, message
+        )
+
+        # Generate voice notification for the fire alert
+        audio_base64 = ""
+        try:
+            # Use cached fire alert audio if available, otherwise generate
+            notification_text = f"Cảnh báo cháy! Cảm biến {sensor_name} phát hiện lửa. Mức độ {level}."
+            audio_base64 = await self.notification_voice_service.generate_voice_notification_base64(
+                notification_text
+            )
+        except Exception as exc:
+            logger.error("Failed to generate fire alert voice notification: %s", exc)
+
+        # Broadcast fire alert to all connected WebSocket clients
+        # This will be forwarded to Android app and web frontend
+        alert_payload = {
+            "type": "fire_detection_alert",
+            "source": "hardware_sensor",
+            "sensor_name": sensor_name,
+            "level": level,
+            "message": message,
+            "consecutive_count": consecutive_count,
+            "timestamp": timestamp or dt.datetime.utcnow().isoformat(),
+            "audio_base64": audio_base64,
+        }
+
+        await self._send_safely(websocket, alert_payload)
+        logger.info("🔥 Hardware fire alert broadcast to client: %s", sensor_name)
+
+        # Also notify through lighting service observer pattern for other connected clients
+        try:
+            # Use the lighting service's listener queue to broadcast to all clients
+            # _listeners is a list of tuples: (event_loop, queue)
+            for loop, listener_queue in self.smart_home_service.lighting_service._listeners:
+                listener_queue.put_nowait({
+                    "type": "hardware_fire_alert",
+                    "sensor_name": sensor_name,
+                    "level": level,
+                    "message": message,
+                    "consecutive_count": consecutive_count,
+                    "timestamp": timestamp or dt.datetime.utcnow().isoformat(),
+                })
+        except Exception as exc:
+            logger.error("Failed to broadcast fire alert to listeners: %s", exc)
 
     @staticmethod
     def _extract_sample_rate(mime_type: Optional[str]) -> Optional[int]:

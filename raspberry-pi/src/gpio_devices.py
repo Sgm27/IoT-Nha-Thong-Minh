@@ -9,11 +9,22 @@ from dataclasses import dataclass
 from enum import Enum
 
 try:
-    from gpiozero import OutputDevice, LED, Buzzer, Servo, PWMOutputDevice, Motor
+    from gpiozero import OutputDevice, LED, Buzzer, Servo, PWMOutputDevice, Motor, DigitalInputDevice
+    from gpiozero.pins.lgpio import LGPIOFactory
     GPIO_AVAILABLE = True
 except ImportError:
     GPIO_AVAILABLE = False
+    DigitalInputDevice = None
     logging.warning("gpiozero không khả dụng - chạy ở chế độ mock")
+
+# ADC support for analog reading (MCP3008/ADS1115)
+try:
+    from gpiozero import MCP3008
+    ADC_AVAILABLE = True
+except ImportError:
+    ADC_AVAILABLE = False
+    MCP3008 = None
+    logging.info("MCP3008 ADC không khả dụng - chỉ dùng digital input cho flame sensor")
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +38,7 @@ class DeviceType(Enum):
     RELAY = "relay"
     PWM = "pwm"
     MOTOR = "motor"
+    FLAME_SENSOR = "flame_sensor"  # Digital input from flame sensor module
 
 
 @dataclass
@@ -48,6 +60,11 @@ class GPIODeviceConfig:
     # Motor specific (for L298N driver)
     # gpio_pin should be tuple: (forward_pin, backward_pin, enable_pin)
 
+    # Flame sensor specific
+    # Cảm biến lửa có 2 output: DO (digital 0/1) và AO (analog)
+    # gpio_pin: DO pin (digital), pull_up: True nếu cần pull-up
+    # active_low: True nếu sensor output LOW khi phát hiện lửa (thường là vậy)
+
 
 class GPIODevicesController:
     """
@@ -59,6 +76,7 @@ class GPIODevicesController:
     - Servo: Điều khiển góc quay (0-180 độ)
     - Relay: Bật/tắt relay (active LOW/HIGH)
     - PWM: PWM output với tần số tùy chỉnh
+    - Flame Sensor: Đọc tín hiệu digital từ cảm biến lửa
     """
 
     def __init__(self, device_configs: Dict[str, GPIODeviceConfig], mock_mode: bool = False):
@@ -132,6 +150,19 @@ class GPIODevicesController:
                 )
             else:
                 logger.error(f"Motor '{config.name}' cần 3 pins (forward, backward, enable)")
+                return None
+
+        elif config.device_type == DeviceType.FLAME_SENSOR:
+            # Flame sensor: đọc tín hiệu digital từ pin DO
+            # Module có LM393 comparator với pull-up resistor riêng
+            # DO output: LOW (0) = có lửa, HIGH (1) = không có lửa
+            if DigitalInputDevice is not None:
+                return DigitalInputDevice(
+                    config.gpio_pin,
+                    pull_up=False,  # Module đã có pull-up riêng, không cần internal pull-up
+                )
+            else:
+                logger.error("DigitalInputDevice không khả dụng cho flame sensor")
                 return None
 
         else:
@@ -395,6 +426,87 @@ class GPIODevicesController:
         except Exception as e:
             logger.error(f"Lỗi khi điều khiển PWM '{name}': {e}")
             return False
+
+    # ===== Flame Sensor Methods =====
+
+    def flame_sensor_read(self, name: str) -> Optional[bool]:
+        """
+        Đọc trạng thái cảm biến lửa
+
+        Args:
+            name: Device name
+
+        Returns:
+            True nếu phát hiện lửa, False nếu không, None nếu lỗi
+            Lưu ý: Module thường output LOW khi phát hiện lửa
+        """
+        device_key = name.lower().strip()
+
+        if device_key not in self.devices:
+            logger.warning(f"Không tìm thấy flame sensor: '{name}'")
+            return None
+
+        config = self.device_configs.get(name) or self.device_configs.get(device_key)
+
+        if self.mock_mode:
+            # Trong mock mode, trả về trạng thái đã lưu (mặc định False = không có lửa)
+            state = self._states.get(device_key, False)
+            return state
+
+        device = self.devices[device_key]
+        if device is None:
+            return None
+
+        try:
+            # DigitalInputDevice: is_active dựa trên pull_up và giá trị đọc
+            # Với flame sensor module:
+            # - DO = LOW (0) khi có lửa (vì comparator output)
+            # - DO = HIGH (1) khi không có lửa
+            # Với pull_up=True, is_active = True khi pin LOW
+            # Nên: is_active = True nghĩa là có lửa
+            if DigitalInputDevice is not None and isinstance(device, DigitalInputDevice):
+                # Đọc giá trị raw từ sensor
+                # Module LM393: LOW (0) = có lửa, HIGH (1) = không có lửa
+                raw_value = device.value  # 0 hoặc 1
+                fire_detected = raw_value == 0  # LOW = có lửa
+
+                # Cập nhật state
+                self._states[device_key] = fire_detected
+                return fire_detected
+            else:
+                logger.warning(f"Device '{name}' không phải DigitalInputDevice")
+                return None
+        except Exception as e:
+            logger.error(f"Lỗi khi đọc flame sensor '{name}': {e}")
+            return None
+
+    def flame_sensor_is_fire_detected(self, name: str) -> bool:
+        """
+        Kiểm tra xem có phát hiện lửa không
+
+        Args:
+            name: Device name
+
+        Returns:
+            True nếu phát hiện lửa, False nếu không hoặc lỗi
+        """
+        result = self.flame_sensor_read(name)
+        return result is True
+
+    def get_all_flame_sensors(self) -> Dict[str, bool]:
+        """
+        Đọc trạng thái tất cả flame sensors
+
+        Returns:
+            Dict mapping sensor name -> fire detected (True/False)
+        """
+        results = {}
+        for name, config in self.device_configs.items():
+            if config.device_type == DeviceType.FLAME_SENSOR:
+                fire_detected = self.flame_sensor_read(name)
+                if fire_detected is not None:
+                    results[name] = fire_detected
+        return results
 
     # ===== Generic Methods =====
 
