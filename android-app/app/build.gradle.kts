@@ -19,8 +19,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val defaultApiBaseUrl = "https://iot.sonktx.online/"
-        val defaultWsBaseUrl = "wss://iot.sonktx.online"
+        val defaultApiBaseUrl = "https://iot.h3nr1-d14z.io.vn/"
+        val defaultWsBaseUrl = "wss://iot.h3nr1-d14z.io.vn/"
         val apiBaseUrl = (project.findProperty("APP_API_BASE_URL") as? String)?.takeIf { it.isNotBlank() }
             ?: defaultApiBaseUrl
         val wsBaseUrl = (project.findProperty("APP_WS_BASE_URL") as? String)?.takeIf { it.isNotBlank() }
