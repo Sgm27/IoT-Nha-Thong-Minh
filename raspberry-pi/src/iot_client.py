@@ -394,9 +394,9 @@ async def main():
         # Door Servo (Servo cửa) - SG90 hoặc MG90S
         # Kết nối: Signal → GPIO25, VCC → 5V, GND → GND
         # 0° = đóng cửa, 90° = mở cửa
-        "Cửa": GPIODeviceConfig(
+        "Cửa chính": GPIODeviceConfig(
             gpio_pin=25,  # GPIO25 cho Signal
-            name="Cửa",
+            name="Cửa chính",
             device_type=DeviceType.SERVO,
             min_pulse_width=0.5/1000,   # 0.5ms cho SG90
             max_pulse_width=2.5/1000,   # 2.5ms cho SG90
