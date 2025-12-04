@@ -7,6 +7,9 @@ import com.example.iot_nha_thong_minh.data.local.FireAlertDao
 import com.example.iot_nha_thong_minh.data.local.FireAlertEntity
 import com.example.iot_nha_thong_minh.data.model.ChatMessage
 import com.example.iot_nha_thong_minh.data.model.FireAlert
+import com.example.iot_nha_thong_minh.data.remote.DoorDto
+import com.example.iot_nha_thong_minh.data.remote.DoorRequestDto
+import com.example.iot_nha_thong_minh.data.remote.DoorStreamMessageDto
 import com.example.iot_nha_thong_minh.data.remote.GeminiRealtimeEvent
 import com.example.iot_nha_thong_minh.data.remote.GeminiWebSocketClient
 import com.example.iot_nha_thong_minh.data.remote.LightDto
@@ -44,6 +47,16 @@ class SmartHomeRepository(
 
     suspend fun toggleLight(location: String, turnOn: Boolean): LightDto =
         if (turnOn) api.turnOnLight(LightRequestDto(location)) else api.turnOffLight(LightRequestDto(location))
+
+    suspend fun turnOnAllLights(): List<LightDto> = api.turnOnAllLights()
+
+    suspend fun turnOffAllLights(): List<LightDto> = api.turnOffAllLights()
+
+    suspend fun fetchDoors(): List<DoorDto> = api.getDoors()
+
+    suspend fun openDoor(location: String): DoorDto = api.openDoor(DoorRequestDto(location))
+
+    suspend fun closeDoor(location: String): DoorDto = api.closeDoor(DoorRequestDto(location))
 
     fun observeLights(): Flow<LightStreamMessageDto> = callbackFlow {
         val request = Request.Builder()
@@ -94,6 +107,30 @@ class SmartHomeRepository(
                     trySend(message)
                 } catch (error: Throwable) {
                     Log.e("SmartHomeRepository", "Failed to parse music stream", error)
+                }
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
+                close(t)
+            }
+        }
+
+        val socket = okHttpClient.newWebSocket(request, listener)
+        awaitClose { socket.cancel() }
+    }
+
+    fun observeDoors(): Flow<DoorStreamMessageDto> = callbackFlow {
+        val request = Request.Builder()
+            .url("${EnvironmentConfig.wsBaseUrl}/smart-home/doors/stream")
+            .build()
+
+        val listener = object : WebSocketListener() {
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                try {
+                    val message = json.decodeFromString(DoorStreamMessageDto.serializer(), text)
+                    trySend(message)
+                } catch (error: Throwable) {
+                    Log.e("SmartHomeRepository", "Failed to parse door stream", error)
                 }
             }
 

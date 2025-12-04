@@ -991,17 +991,23 @@ class GeminiService:
                 )
 
             elif name == "control_door":
-                device = args.get("device", "Cửa")
+                device = args.get("device", "Cửa chính")
                 action = args.get("action", "")
 
-                # Convert action to servo angle
-                # open = 90° (fully open), close = 0° (fully closed)
-                angle = 90.0 if action == "open" else 0.0
+                logger.info(f"🚪 Gemini điều khiển cửa: {device} → {action}")
 
-                logger.info(f"🚪 Gemini điều khiển cửa: {device} → {action} (góc {angle}°)")
+                # Update door state using DoorService
+                if action == "open":
+                    door_state = self.smart_home_service.open_door(device)
+                elif action == "close":
+                    door_state = self.smart_home_service.close_door(device)
+                else:
+                    door_state = self.smart_home_service.door_service.get_door_state(device)
 
-                # Broadcast door control to ALL connected clients (including IoT client)
-                self.smart_home_service.lighting_service.notify_door_control(device, action, angle)
+                # Also broadcast to IoT client for hardware control
+                self.smart_home_service.lighting_service.notify_door_control(
+                    device, action, door_state.angle
+                )
 
                 responses.append(
                     types.FunctionResponse(
@@ -1011,7 +1017,8 @@ class GeminiService:
                             "result": "success",
                             "device": device,
                             "action": action,
-                            "angle": angle,
+                            "angle": door_state.angle,
+                            "is_open": door_state.is_open,
                         },
                     )
                 )

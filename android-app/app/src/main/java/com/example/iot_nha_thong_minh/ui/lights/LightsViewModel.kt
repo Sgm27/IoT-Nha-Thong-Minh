@@ -79,4 +79,28 @@ class LightsViewModel(private val repository: SmartHomeRepository) : ViewModel()
             }
         }
     }
+
+    fun turnOnAllLights() {
+        viewModelScope.launch {
+            try {
+                repository.turnOnAllLights()
+            } catch (error: Exception) {
+                _uiState.update { state ->
+                    state.copy(errorMessage = error.message ?: "Không thể bật tất cả đèn")
+                }
+            }
+        }
+    }
+
+    fun turnOffAllLights() {
+        viewModelScope.launch {
+            try {
+                repository.turnOffAllLights()
+            } catch (error: Exception) {
+                _uiState.update { state ->
+                    state.copy(errorMessage = error.message ?: "Không thể tắt tất cả đèn")
+                }
+            }
+        }
+    }
 }

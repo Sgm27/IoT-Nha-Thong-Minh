@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.DoorFront
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Mic
@@ -34,6 +35,8 @@ import com.example.iot_nha_thong_minh.data.NetworkModule
 import com.example.iot_nha_thong_minh.ui.AppViewModelFactory
 import com.example.iot_nha_thong_minh.ui.chat.ChatScreen
 import com.example.iot_nha_thong_minh.ui.chat.ChatViewModel
+import com.example.iot_nha_thong_minh.ui.door.DoorScreen
+import com.example.iot_nha_thong_minh.ui.door.DoorViewModel
 import com.example.iot_nha_thong_minh.ui.fire.FireScreen
 import com.example.iot_nha_thong_minh.ui.fire.FireViewModel
 import com.example.iot_nha_thong_minh.ui.lights.LightsScreen
@@ -60,6 +63,7 @@ class MainActivity : ComponentActivity() {
 private enum class HomeTab(val label: String, val icon: ImageVector) {
     CHAT("Trợ lý", Icons.Default.Mic),
     LIGHTS("Đèn", Icons.Default.Lightbulb),
+    DOOR("Cửa", Icons.Default.DoorFront),
     MOTOR("Quạt", Icons.Default.Air),
     FIRE("Cháy", Icons.Default.LocalFireDepartment),
     MUSIC("Nhạc", Icons.Default.MusicNote),
@@ -70,6 +74,7 @@ private fun SmartHomeApp() {
     val factory = remember { AppViewModelFactory(NetworkModule.repository) }
     val chatViewModel: ChatViewModel = viewModel(factory = factory)
     val lightsViewModel: LightsViewModel = viewModel(factory = factory)
+    val doorViewModel: DoorViewModel = viewModel(factory = factory)
     val musicViewModel: MusicViewModel = viewModel(factory = factory)
     val motorViewModel: MotorViewModel = viewModel(factory = factory)
     val fireViewModel: FireViewModel = viewModel(factory = factory)
@@ -110,6 +115,7 @@ private fun SmartHomeApp() {
         when (selectedTab) {
             HomeTab.CHAT -> ChatScreen(viewModel = chatViewModel, modifier = Modifier.padding(innerPadding))
             HomeTab.LIGHTS -> LightsScreen(viewModel = lightsViewModel, modifier = Modifier.padding(innerPadding))
+            HomeTab.DOOR -> DoorScreen(viewModel = doorViewModel, modifier = Modifier.padding(innerPadding))
             HomeTab.MOTOR -> MotorScreen(viewModel = motorViewModel, modifier = Modifier.padding(innerPadding))
             HomeTab.FIRE -> FireScreen(viewModel = fireViewModel, modifier = Modifier.padding(innerPadding))
             HomeTab.MUSIC -> MusicScreen(viewModel = musicViewModel, modifier = Modifier.padding(innerPadding))

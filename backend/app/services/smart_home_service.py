@@ -19,6 +19,13 @@ class LightState:
     is_on: bool = False
 
 
+@dataclass
+class DoorState:
+    location: str
+    is_open: bool = False
+    angle: float = 0.0  # Góc mở cửa (0-90°)
+
+
 class LightingService:
     """Manage the state of smart home lights."""
 
@@ -296,14 +303,155 @@ class MusicPlaybackState:
         return base_position + elapsed
 
 
+class DoorService:
+    """Manage the state of smart home doors."""
+
+    def __init__(self, storage_path: Optional[Path] = None) -> None:
+        self.storage_path = storage_path or (settings.data_directory / "door_state.json")
+        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        self._states: Dict[str, DoorState] = {}
+        self._listeners: List[Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[dict]"]] = []
+        self._listener_lock = threading.Lock()
+        self._load()
+
+    def _default_states(self) -> Dict[str, DoorState]:
+        # Mặc định có một cửa chính
+        defaults: Dict[str, DoorState] = {}
+        default_door = "Cửa chính"
+        defaults[default_door.lower().strip()] = DoorState(location=default_door, is_open=False, angle=0.0)
+        return defaults
+
+    def _load(self) -> None:
+        if not self.storage_path.exists():
+            self._states = self._default_states()
+            self._persist()
+            return
+        try:
+            with self.storage_path.open("r", encoding="utf-8") as file:
+                payload = json.load(file)
+        except json.JSONDecodeError:
+            logger.warning("Corrupted door state file, recreating it with defaults")
+            self._states = self._default_states()
+            self._persist()
+            return
+
+        states: Dict[str, DoorState] = {}
+        if isinstance(payload, dict):
+            for location_key, raw_state in payload.items():
+                if isinstance(raw_state, dict):
+                    name = raw_state.get("name", location_key)
+                    is_open = bool(raw_state.get("is_open", False))
+                    angle = float(raw_state.get("angle", 0.0))
+                else:
+                    name = str(location_key)
+                    is_open = False
+                    angle = 0.0
+                normalized_key = location_key.lower().strip()
+                states[normalized_key] = DoorState(location=name, is_open=is_open, angle=angle)
+
+        if not states:
+            states = self._default_states()
+
+        self._states = states
+        self._persist()
+
+    def _persist(self) -> None:
+        with self.storage_path.open("w", encoding="utf-8") as file:
+            json.dump(
+                {
+                    loc: {"name": state.location, "is_open": state.is_open, "angle": state.angle}
+                    for loc, state in self._states.items()
+                },
+                file,
+                ensure_ascii=False,
+                indent=2,
+            )
+
+    def _notify_listeners(self, payload: dict) -> None:
+        with self._listener_lock:
+            listeners = list(self._listeners)
+        for loop, queue in listeners:
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, payload)
+            except RuntimeError:
+                self.remove_listener(queue)
+
+    async def add_listener(self) -> "asyncio.Queue[dict]":
+        loop = asyncio.get_running_loop()
+        queue: "asyncio.Queue[dict]" = asyncio.Queue()
+        with self._listener_lock:
+            self._listeners.append((loop, queue))
+        # Provide an immediate snapshot to new listeners
+        snapshot = [
+            {"location": state.location, "is_open": state.is_open, "angle": state.angle}
+            for state in self.get_all_states()
+        ]
+        await queue.put({"type": "snapshot", "doors": snapshot})
+        return queue
+
+    def remove_listener(self, queue: "asyncio.Queue[dict]") -> None:
+        with self._listener_lock:
+            self._listeners = [
+                (loop, q)
+                for loop, q in self._listeners
+                if q is not queue
+            ]
+
+    def control_door(self, location: str, action: str, angle: Optional[float] = None) -> DoorState:
+        """
+        Điều khiển cửa.
+
+        Args:
+            location: Tên cửa
+            action: "open" (mở), "close" (đóng), hoặc "set_angle" (đặt góc)
+            angle: Góc mở cửa (0-90°), mặc định 90° khi mở
+        """
+        self._load()
+        location_key = location.lower().strip()
+        display_name = location.strip()
+        state = self._states.get(location_key, DoorState(location=display_name))
+        state.location = display_name
+
+        if action == "open":
+            state.is_open = True
+            state.angle = angle if angle is not None else 90.0
+        elif action == "close":
+            state.is_open = False
+            state.angle = 0.0
+        elif action == "set_angle":
+            if angle is not None:
+                state.angle = max(0.0, min(90.0, angle))
+                state.is_open = state.angle > 0
+
+        self._states[location_key] = state
+        self._persist()
+        logger.info("Door %s: action=%s, angle=%.1f°", location_key, action, state.angle)
+        self._notify_listeners({"type": "update", "door": asdict(state)})
+        return state
+
+    def get_door_state(self, location: str) -> DoorState:
+        self._load()
+        location_key = location.lower().strip()
+        state = self._states.get(location_key)
+        if state:
+            return state
+        return DoorState(location=location.strip())
+
+    def get_all_states(self) -> Iterable[DoorState]:
+        self._load()
+        return list(self._states.values())
+
+
 class SmartHomeService:
     def __init__(
         self,
         lighting_service: Optional[LightingService] = None,
         music_service: Optional[MusicService] = None,
+        door_service: Optional[DoorService] = None,
     ) -> None:
         self.lighting_service = lighting_service or LightingService()
         self.music_service = music_service or MusicService()
+        self.door_service = door_service or DoorService()
         self._music_playback_state = MusicPlaybackState()
         self._music_listeners: List[
             Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[dict]"]
@@ -315,6 +463,34 @@ class SmartHomeService:
 
     def turn_off_light(self, location: str) -> LightState:
         return self.lighting_service.toggle_light(location, False)
+
+    def turn_on_all_lights(self) -> List[LightState]:
+        """Bật tất cả các đèn."""
+        updated_states = []
+        for state in self.lighting_service.get_all_states():
+            updated_state = self.lighting_service.toggle_light(state.location, True)
+            updated_states.append(updated_state)
+        return updated_states
+
+    def turn_off_all_lights(self) -> List[LightState]:
+        """Tắt tất cả các đèn."""
+        updated_states = []
+        for state in self.lighting_service.get_all_states():
+            updated_state = self.lighting_service.toggle_light(state.location, False)
+            updated_states.append(updated_state)
+        return updated_states
+
+    def open_door(self, location: str, angle: Optional[float] = None) -> DoorState:
+        """Mở cửa."""
+        return self.door_service.control_door(location, "open", angle)
+
+    def close_door(self, location: str) -> DoorState:
+        """Đóng cửa."""
+        return self.door_service.control_door(location, "close")
+
+    def get_doors(self) -> List[DoorState]:
+        """Lấy danh sách tất cả các cửa."""
+        return list(self.door_service.get_all_states())
 
     def _notify_music_listeners(self, payload: dict) -> None:
         with self._music_listener_lock:

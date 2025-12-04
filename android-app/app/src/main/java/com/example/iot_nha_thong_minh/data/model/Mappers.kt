@@ -1,12 +1,16 @@
 package com.example.iot_nha_thong_minh.data.model
 
 import com.example.iot_nha_thong_minh.data.remote.ChatResponseDto
+import com.example.iot_nha_thong_minh.data.remote.DoorDto
+import com.example.iot_nha_thong_minh.data.remote.DoorStreamMessageDto
 import com.example.iot_nha_thong_minh.data.remote.LightDto
 import com.example.iot_nha_thong_minh.data.remote.LightStreamMessageDto
 import com.example.iot_nha_thong_minh.data.remote.MusicPlaybackStateDto
 import com.example.iot_nha_thong_minh.data.remote.MusicStreamMessageDto
 
 fun LightDto.toDomain(): Light = Light(location = location, isOn = isOn)
+
+fun DoorDto.toDomain(): Door = Door(location = location, isOpen = isOpen, angle = angle)
 
 fun MusicPlaybackStateDto.toDomain(): MusicPlaybackState {
     val status = when (status.lowercase()) {
@@ -43,3 +47,9 @@ fun LightStreamMessageDto.toLightUpdates(): List<Light> = when (type) {
 }
 
 fun MusicStreamMessageDto.toPlaybackState(): MusicPlaybackState? = state?.toDomain()
+
+fun DoorStreamMessageDto.toDoorUpdates(): List<Door> = when (type) {
+    "snapshot" -> doors.orEmpty().map { it.toDomain() }
+    "update" -> door?.let { listOf(it.toDomain()) } ?: emptyList()
+    else -> emptyList()
+}

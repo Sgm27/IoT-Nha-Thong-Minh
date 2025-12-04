@@ -5,6 +5,12 @@ data class Light(
     val isOn: Boolean,
 )
 
+data class Door(
+    val location: String,
+    val isOpen: Boolean,
+    val angle: Float, // 0-90 degrees
+)
+
 enum class ChatRole { USER, ASSISTANT, SYSTEM }
 
 data class ChatMessage(

@@ -16,6 +16,21 @@ interface SmartHomeApi {
     @POST("smart-home/lights/off")
     suspend fun turnOffLight(@Body request: LightRequestDto): LightDto
 
+    @POST("smart-home/lights/all/on")
+    suspend fun turnOnAllLights(): List<LightDto>
+
+    @POST("smart-home/lights/all/off")
+    suspend fun turnOffAllLights(): List<LightDto>
+
+    @GET("smart-home/doors")
+    suspend fun getDoors(): List<DoorDto>
+
+    @POST("smart-home/doors/open")
+    suspend fun openDoor(@Body request: DoorRequestDto): DoorDto
+
+    @POST("smart-home/doors/close")
+    suspend fun closeDoor(@Body request: DoorRequestDto): DoorDto
+
     @GET("smart-home/music/library")
     suspend fun getMusicLibrary(): List<String>
 
@@ -103,4 +118,22 @@ data class LightStreamMessageDto(
 data class MusicStreamMessageDto(
     val type: String,
     val state: MusicPlaybackStateDto? = null,
+)
+
+@Serializable
+data class DoorDto(
+    val location: String,
+    @SerialName("is_open")
+    val isOpen: Boolean,
+    val angle: Float,
+)
+
+@Serializable
+data class DoorRequestDto(val location: String)
+
+@Serializable
+data class DoorStreamMessageDto(
+    val type: String,
+    val doors: List<DoorDto>? = null,
+    val door: DoorDto? = null,
 )

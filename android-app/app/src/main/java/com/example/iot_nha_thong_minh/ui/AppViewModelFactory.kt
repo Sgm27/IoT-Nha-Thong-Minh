@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.iot_nha_thong_minh.data.SmartHomeRepository
 import com.example.iot_nha_thong_minh.ui.chat.ChatViewModel
+import com.example.iot_nha_thong_minh.ui.door.DoorViewModel
 import com.example.iot_nha_thong_minh.ui.fire.FireViewModel
 import com.example.iot_nha_thong_minh.ui.lights.LightsViewModel
 import com.example.iot_nha_thong_minh.ui.motor.MotorViewModel
@@ -16,6 +17,7 @@ class AppViewModelFactory(private val repository: SmartHomeRepository) : ViewMod
         modelClass.isAssignableFrom(LightsViewModel::class.java) -> LightsViewModel(repository) as T
         modelClass.isAssignableFrom(MusicViewModel::class.java) -> MusicViewModel(repository) as T
         modelClass.isAssignableFrom(MotorViewModel::class.java) -> MotorViewModel(repository) as T
+        modelClass.isAssignableFrom(DoorViewModel::class.java) -> DoorViewModel(repository) as T
         modelClass.isAssignableFrom(FireViewModel::class.java) -> FireViewModel(repository) as T
         else -> throw IllegalArgumentException("Unknown ViewModel class ${modelClass.simpleName}")
     }

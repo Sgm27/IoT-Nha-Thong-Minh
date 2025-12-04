@@ -8,10 +8,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +38,31 @@ fun LightsScreen(viewModel: LightsViewModel, modifier: Modifier = Modifier) {
         if (uiState.isLoading && uiState.lights.isEmpty()) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         }
+
+        // Nút bật/tắt tất cả đèn
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { viewModel.turnOnAllLights() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(Icons.Filled.Lightbulb, contentDescription = null)
+                Text("Bật tất cả", modifier = Modifier.padding(start = 8.dp))
+            }
+            OutlinedButton(
+                onClick = { viewModel.turnOffAllLights() },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Outlined.Lightbulb, contentDescription = null)
+                Text("Tắt tất cả", modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(uiState.lights, key = { it.location }) { light ->
                 LightItem(light = light, onToggle = { viewModel.toggleLight(light) })

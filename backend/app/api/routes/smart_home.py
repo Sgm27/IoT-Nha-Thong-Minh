@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, confloat, constr
 
-from app.services.smart_home_service import LightState, MusicPlaybackState, get_smart_home_service
+from app.services.smart_home_service import LightState, DoorState, MusicPlaybackState, get_smart_home_service
 
 
 router = APIRouter(prefix="/smart-home", tags=["smart-home"])
@@ -58,8 +58,23 @@ class MusicSeekRequest(BaseModel):
     position_seconds: confloat(ge=0)
 
 
+class DoorRequest(BaseModel):
+    location: constr(strip_whitespace=True, min_length=1)
+    angle: Optional[float] = None  # Góc mở cửa (0-90°)
+
+
+class DoorResponse(BaseModel):
+    location: str
+    is_open: bool
+    angle: float
+
+
 def _serialize_light(state: LightState) -> dict:
     return {"location": state.location, "is_on": state.is_on}
+
+
+def _serialize_door(state: DoorState) -> dict:
+    return {"location": state.location, "is_open": state.is_open, "angle": state.angle}
 
 
 @router.get("/lights", response_model=List[LightResponse])
@@ -83,6 +98,49 @@ def turn_on_light(payload: LightRequest) -> LightResponse:
 def turn_off_light(payload: LightRequest) -> LightResponse:
     state = smart_home_service.turn_off_light(payload.location)
     return LightResponse(**_serialize_light(state))
+
+
+@router.post("/lights/all/on", response_model=List[LightResponse])
+def turn_on_all_lights() -> List[LightResponse]:
+    states = smart_home_service.turn_on_all_lights()
+    return [LightResponse(**_serialize_light(state)) for state in states]
+
+
+@router.post("/lights/all/off", response_model=List[LightResponse])
+def turn_off_all_lights() -> List[LightResponse]:
+    states = smart_home_service.turn_off_all_lights()
+    return [LightResponse(**_serialize_light(state)) for state in states]
+
+
+@router.get("/doors", response_model=List[DoorResponse])
+def list_doors() -> List[DoorResponse]:
+    return [DoorResponse(**_serialize_door(state)) for state in smart_home_service.get_doors()]
+
+
+@router.post("/doors/open", response_model=DoorResponse)
+def open_door(payload: DoorRequest) -> DoorResponse:
+    state = smart_home_service.open_door(payload.location, payload.angle)
+    return DoorResponse(**_serialize_door(state))
+
+
+@router.post("/doors/close", response_model=DoorResponse)
+def close_door(payload: DoorRequest) -> DoorResponse:
+    state = smart_home_service.close_door(payload.location)
+    return DoorResponse(**_serialize_door(state))
+
+
+@router.websocket("/doors/stream")
+async def stream_door_updates(websocket: WebSocket) -> None:
+    await websocket.accept()
+    queue = await smart_home_service.door_service.add_listener()
+    try:
+        while True:
+            message = await queue.get()
+            await websocket.send_json(message)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        smart_home_service.door_service.remove_listener(queue)
 
 
 @router.get("/music/library", response_model=List[str])
