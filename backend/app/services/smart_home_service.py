@@ -307,7 +307,7 @@ class DoorService:
     """Manage the state of smart home doors."""
 
     def __init__(self, storage_path: Optional[Path] = None) -> None:
-        self.storage_path = storage_path or (settings.data_directory / "door_state.json")
+        self.storage_path = storage_path or (Path("data") / "door_state.json")
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._states: Dict[str, DoorState] = {}
         self._listeners: List[Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[dict]"]] = []
