@@ -41,6 +41,7 @@ class GeminiService:
     - pause_music: tạm dừng bài hát đang phát
     - continue_music: tiếp tục phát bài hát đã tạm dừng
     - control_motor: điều khiển motor/quạt (bật, tắt, điều chỉnh tốc độ)
+    - control_door: mở hoặc đóng cửa bằng servo motor
 
     Quy tắc sử dụng tool:
     1. Nếu người dùng nhắc đến bật đèn, chiếu sáng, sáng đèn,... hãy gọi tool turn_on_light.
@@ -51,6 +52,8 @@ class GeminiService:
     6. Nếu người dùng nhắc đến bật quạt, mở quạt, chạy quạt,... hãy gọi tool control_motor với action "on".
     7. Nếu người dùng nhắc đến tắt quạt, dừng quạt,... hãy gọi tool control_motor với action "off".
     8. Nếu người dùng muốn điều chỉnh tốc độ quạt (chậm, nhanh, mạnh, nhẹ,...) hãy gọi tool control_motor với speed phù hợp.
+    9. Nếu người dùng nhắc đến mở cửa, mở cổng,... hãy gọi tool control_door với action "open".
+    10. Nếu người dùng nhắc đến đóng cửa, đóng cổng, khép cửa,... hãy gọi tool control_door với action "close".
 
     Khi xử lý hình ảnh, mô tả chi tiết nội dung ảnh và liên hệ với ngữ cảnh căn nhà.
     Khi trả lời, hãy chia nhỏ nội dung thành các mục rõ ràng, dễ hiểu.
@@ -100,8 +103,12 @@ class GeminiService:
 
         # Door control state
         self._last_door_open_time: float = 0.0
-        self._door_open_cooldown_seconds: float = 10.0  # Cooldown between door opens
+        self._door_open_cooldown_seconds: float = 30.0  # Cooldown between door opens (30s)
         self._door_auto_close_seconds: float = 5.0  # Auto close after this many seconds
+
+        # Face recognition throttling - avoid calling API too often
+        self._last_face_recognition_time: float = 0.0
+        self._face_recognition_interval_seconds: float = 3.0  # Only check face every 3 seconds
 
     # ------------------------------------------------------------------
     # WebSocket orchestration
@@ -551,6 +558,14 @@ class GeminiService:
                         update.get("name"),
                         update.get("action")
                     )
+                elif update.get("type") == "door_control":
+                    await self._send_safely(websocket, update)
+                    logger.info(
+                        "Forwarded door control: %s → %s (angle: %s°)",
+                        update.get("name"),
+                        update.get("action"),
+                        update.get("angle")
+                    )
                 elif update.get("type") == "hardware_fire_alert":
                     # Forward hardware fire alert to all connected clients
                     await self._send_safely(
@@ -658,11 +673,28 @@ class GeminiService:
         Includes cooldown to prevent multiple opens and auto-close after delay.
         """
         if not self.face_recognition_service:
-            logger.warning("Face recognition service not available")
             return
 
         if not self.face_recognition_service.is_enabled:
             return
+
+        current_time = time.time()
+
+        # Throttle face recognition API calls - only process every N seconds
+        time_since_last_check = current_time - self._last_face_recognition_time
+        if time_since_last_check < self._face_recognition_interval_seconds:
+            return
+
+        # Also skip if door was recently opened (during cooldown)
+        time_since_door_open = current_time - self._last_door_open_time
+        if time_since_door_open < self._door_open_cooldown_seconds:
+            logger.debug(
+                f"Door cooldown active ({time_since_door_open:.1f}s / {self._door_open_cooldown_seconds}s), skipping face recognition"
+            )
+            return
+
+        # Update last check time BEFORE calling API
+        self._last_face_recognition_time = current_time
 
         logger.debug(f"👤 Processing image for face recognition ({len(data)} bytes)")
 
@@ -673,14 +705,6 @@ class GeminiService:
             if result.get("is_host_detected"):
                 matched_host = result.get("matched_host", "Unknown")
                 confidence = result.get("confidence", 0.0)
-
-                # Check cooldown to prevent multiple opens
-                current_time = time.time()
-                if current_time - self._last_door_open_time < self._door_open_cooldown_seconds:
-                    logger.debug(
-                        f"Door open cooldown active, skipping (last open: {self._last_door_open_time:.1f}s ago)"
-                    )
-                    return
 
                 self._last_door_open_time = current_time
 
@@ -966,6 +990,32 @@ class GeminiService:
                     )
                 )
 
+            elif name == "control_door":
+                device = args.get("device", "Cửa")
+                action = args.get("action", "")
+
+                # Convert action to servo angle
+                # open = 90° (fully open), close = 0° (fully closed)
+                angle = 90.0 if action == "open" else 0.0
+
+                logger.info(f"🚪 Gemini điều khiển cửa: {device} → {action} (góc {angle}°)")
+
+                # Broadcast door control to ALL connected clients (including IoT client)
+                self.smart_home_service.lighting_service.notify_door_control(device, action, angle)
+
+                responses.append(
+                    types.FunctionResponse(
+                        id=function_call.id,
+                        name=name,
+                        response={
+                            "result": "success",
+                            "device": device,
+                            "action": action,
+                            "angle": angle,
+                        },
+                    )
+                )
+
             else:
                 responses.append(
                     types.FunctionResponse(
@@ -1080,6 +1130,25 @@ class GeminiService:
                                 "required": ["action"],
                             },
                         ),
+                        types.FunctionDeclaration(
+                            name="control_door",
+                            description="Mở hoặc đóng cửa bằng servo motor",
+                            parameters={
+                                "type": "object",
+                                "properties": {
+                                    "device": {
+                                        "type": "string",
+                                        "description": "Tên cửa cần điều khiển (mặc định: Cửa)",
+                                    },
+                                    "action": {
+                                        "type": "string",
+                                        "enum": ["open", "close"],
+                                        "description": "Hành động: open (mở cửa), close (đóng cửa)",
+                                    },
+                                },
+                                "required": ["action"],
+                            },
+                        ),
                     ],
                 )
             ],
@@ -1142,8 +1211,14 @@ class GeminiService:
     async def _send_safely(self, websocket: WebSocket, data: dict) -> None:
         lock = self._get_send_lock(websocket)
         async with lock:
-            if websocket.client_state.name == "CONNECTED":
-                await websocket.send_text(json.dumps(data))
+            try:
+                if websocket.client_state.name == "CONNECTED" and websocket.application_state.name == "CONNECTED":
+                    await websocket.send_text(json.dumps(data))
+            except RuntimeError as e:
+                # WebSocket already closed, ignore
+                logger.debug(f"WebSocket send skipped (closed): {e}")
+            except Exception as e:
+                logger.warning(f"WebSocket send failed: {e}")
 
     def _get_send_lock(self, websocket: WebSocket) -> asyncio.Lock:
         lock = self._send_locks.get(websocket)

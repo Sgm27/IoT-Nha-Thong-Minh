@@ -5,6 +5,7 @@ IoT Client chính cho Raspberry Pi 5
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 from typing import Dict, Optional
@@ -179,12 +180,12 @@ class IoTClient:
             logger.info(f"Nhận lệnh cửa: '{name}' → {action} (góc {angle}°)")
 
             if action == "open":
-                # Mở cửa = xoay servo đến góc mở (90° cho servo 90)
-                self.gpio.servo_set_angle(name, angle if angle > 0 else 90)
+                # Mở cửa = xoay servo về 0° (servo mounted in reverse)
+                self.gpio.servo_set_angle(name, 0)
                 logger.info(f"🚪 Đã mở cửa '{name}'")
             elif action == "close":
-                # Đóng cửa = xoay servo về 0°
-                self.gpio.servo_set_angle(name, 0)
+                # Đóng cửa = xoay servo đến 90°
+                self.gpio.servo_set_angle(name, 90)
                 logger.info(f"🚪 Đã đóng cửa '{name}'")
             elif action == "set_angle":
                 # Đặt góc tùy chỉnh
@@ -430,8 +431,9 @@ async def main():
     )
 
     # WebSocket config
+    websocket_url = os.getenv("WEBSOCKET_SERVER_URL", "ws://localhost:8000/ws/gemini")
     websocket_config = WebSocketConfig(
-        server_url="ws://localhost:8000/ws/gemini",  # Thay bằng IP backend
+        server_url=websocket_url,
         reconnect_delay=3.0,
         ping_interval=10.0,
     )
@@ -446,7 +448,6 @@ async def main():
 
     # Mock mode để test (không cần hardware thật)
     # Set MOCK_MODE=true trong environment để enable
-    import os
     mock_mode = os.getenv("MOCK_MODE", "false").lower() in ("true", "1", "yes")
 
     # Create client

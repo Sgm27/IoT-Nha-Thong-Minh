@@ -262,6 +262,14 @@ class GPIODevicesController:
             device.value = servo_value
             self._states[device_key] = angle
             logger.info(f"Servo '{name}' -> {angle}°")
+
+            # Detach servo after movement to prevent jiggling
+            # Wait a bit for servo to reach position, then stop PWM signal
+            import time
+            time.sleep(0.5)  # Give servo time to move
+            device.detach()  # Stop sending PWM signal
+            logger.debug(f"Servo '{name}' detached to prevent jiggling")
+
             return True
         except Exception as e:
             logger.error(f"Lỗi khi điều khiển servo '{name}': {e}")
