@@ -116,6 +116,11 @@ class GeminiService:
     async def handle_websocket_connection(self, websocket: WebSocket) -> None:
         """Main entry point for the Gemini WebSocket connection."""
 
+        # Check WebSocket state before proceeding
+        if websocket.client_state.name != "CONNECTED":
+            logger.warning("WebSocket not connected at start of handle_websocket_connection")
+            return
+
         previous_session_handle = self.session_service.load_previous_session_handle()
         self._latest_session_handle = previous_session_handle
         self._latest_token_usage = self._sanitize_token_usage(
@@ -190,7 +195,15 @@ class GeminiService:
         async def receive_messages():
             try:
                 while True:
-                    data = await websocket.receive_text()
+                    # Check WebSocket state before receiving
+                    if websocket.client_state.name != "CONNECTED":
+                        logger.info("Offline loop: WebSocket disconnected")
+                        break
+                    try:
+                        data = await websocket.receive_text()
+                    except RuntimeError as e:
+                        logger.info(f"Offline loop: WebSocket runtime error: {e}")
+                        break
                     payload = json.loads(data)
                     if "text" in payload:
                         text = payload["text"]
@@ -224,6 +237,11 @@ class GeminiService:
         try:
             while True:
                 try:
+                    # Check if WebSocket is still connected before receiving
+                    if websocket.client_state.name != "CONNECTED":
+                        logger.info("WebSocket disconnected, stopping client relay")
+                        break
+
                     message = await asyncio.wait_for(
                         websocket.receive_text(), timeout=settings.websocket_receive_timeout
                     )
@@ -233,6 +251,10 @@ class GeminiService:
                         settings.websocket_receive_timeout,
                     )
                     continue
+                except RuntimeError as e:
+                    # WebSocket disconnected
+                    logger.info(f"WebSocket runtime error in client relay: {e}")
+                    break
 
                 data = json.loads(message)
                 logger.debug(f"📥 Received from client: {list(data.keys())}")
@@ -483,8 +505,20 @@ class GeminiService:
                     logger.info("WebSocket disconnected during receive")
                     break
                 except Exception as e:
-                    logger.error(f"❌ Error processing Gemini response: {e}")
-                    logger.exception("Full traceback:")
+                    error_str = str(e)
+                    # Check if it's a Gemini keepalive timeout
+                    if "keepalive ping timeout" in error_str or "ConnectionClosedError" in str(type(e)):
+                        logger.warning(f"⚠️ Gemini connection lost (keepalive timeout): {e}")
+                        # Notify client to reconnect
+                        await self._send_safely(websocket, {
+                            "type": "connection_error",
+                            "code": "gemini_keepalive_timeout",
+                            "message": "Kết nối Gemini bị mất. Vui lòng kết nối lại.",
+                            "should_reconnect": True,
+                        })
+                    else:
+                        logger.error(f"❌ Error processing Gemini response: {e}")
+                        logger.exception("Full traceback:")
                     # Break on error to exit while loop
                     break
                     

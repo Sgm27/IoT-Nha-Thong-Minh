@@ -482,11 +482,17 @@ class SmartHomeService:
 
     def open_door(self, location: str, angle: Optional[float] = None) -> DoorState:
         """Mở cửa."""
-        return self.door_service.control_door(location, "open", angle)
+        state = self.door_service.control_door(location, "open", angle)
+        # Broadcast to IoT client via lighting service listeners
+        self.lighting_service.notify_door_control(location, "open", state.angle)
+        return state
 
     def close_door(self, location: str) -> DoorState:
         """Đóng cửa."""
-        return self.door_service.control_door(location, "close")
+        state = self.door_service.control_door(location, "close")
+        # Broadcast to IoT client via lighting service listeners
+        self.lighting_service.notify_door_control(location, "close", state.angle)
+        return state
 
     def get_doors(self) -> List[DoorState]:
         """Lấy danh sách tất cả các cửa."""

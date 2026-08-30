@@ -84,3 +84,6 @@ output/
 results/
 uploads/
 downloads/
+
+# OMC local state
+.omc/
